@@ -1,0 +1,80 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+  binaryTargets   = ["native", "darwin-arm64", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [pg_graphql, pg_stat_statements, pgcrypto, pgjwt, supabase_vault, uuid_ossp(map: "uuid-ossp")]
+}
+
+model User {
+  id                    String                  @id
+  email                 String                  @unique
+  credits               Int                     @default(3)
+  createdAt             DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  generatedImages       GeneratedImage[]
+  image_generation_jobs image_generation_jobs[]
+  subscription          Subscription?
+
+  @@map("users")
+}
+
+model Subscription {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId               String    @unique @map("user_id")
+  status               String    @default("Free")
+  stripeCustomerId     String?   @map("stripe_customer_id")
+  stripeSubscriptionId String?   @map("stripe_subscription_id")
+  priceId              String?   @map("price_id")
+  currentPeriodEnd     DateTime? @map("current_period_end") @db.Timestamptz(6)
+  createdAt            DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user                 User      @relation(fields: [userId], references: [id])
+
+  @@index([userId], map: "idx_subscriptions_user_id")
+  @@map("subscriptions")
+}
+
+model GeneratedImage {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id")
+  imageUrl  String   @map("image_url")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId], map: "idx_generated_images_user_id")
+  @@map("generated_images")
+}
+
+model image_generation_jobs {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id          String
+  status           String    @default("pending")
+  progress         Int       @default(0)
+  input_image_key  String?
+  output_image_url String?
+  error_message    String?
+  created_at       DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime  @default(now()) @db.Timestamptz(6)
+  completed_at     DateTime? @db.Timestamptz(6)
+  users            User      @relation(fields: [user_id], references: [id])
+
+  @@index([created_at], map: "idx_image_jobs_created_at")
+  @@index([status], map: "idx_image_jobs_status")
+  @@index([user_id], map: "idx_image_jobs_user_id")
+}
+
+model CustomPrompt {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id")
+  promptText String  @map("prompt_text")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("custom_prompts")
+  @@index([userId])
+}

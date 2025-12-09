@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "PopCam",
+    "slug": "popcam-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./app-logo.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "requireFullScreen": true,
+      "bundleIdentifier": "com.popcam.app",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "PopCam needs access to your camera to take photos and generate infographics.",
+        "NSPhotoLibraryUsageDescription": "PopCam needs access to your photo library to save and select images.",
+        "NSPhotoLibraryAddUsageDescription": "PopCam needs permission to save generated infographics to your photo library.",
+        "NSMicrophoneUsageDescription": "PopCam may need microphone access for video features."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./app-logo.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.popcam.app"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "d265170c-e9ca-4a1e-986f-37f630913356"
+      }
+    },
+    "owner": "fengcainiao",
+    "scheme": "com.popcam.app",
+    "plugins": [
+      "expo-secure-store",
+      "expo-web-browser",
+      "react-native-iap"
+    ]
+  }
+}

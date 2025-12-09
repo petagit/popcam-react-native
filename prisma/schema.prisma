@@ -1,0 +1,62 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+  binaryTargets   = ["native", "darwin-arm64", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL") // For regular operations via connection pooler
+  directUrl  = env("DIRECT_URL")   // For migrations and introspection
+  extensions = [uuid_ossp(map: "uuid-ossp"), pg_graphql(), pg_stat_statements(), pgcrypto(), pgjwt(), supabase_vault()]
+}
+
+model User {
+  id            String        @id
+  email         String        @unique
+  credits       Int           @default(3)
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  subscription  Subscription?
+  generatedImages GeneratedImage[]
+
+  @@map("users")
+}
+
+model Subscription {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId               String    @map("user_id")
+  status               String    @default("Free")
+  stripeCustomerId     String?   @map("stripe_customer_id")
+  stripeSubscriptionId String?   @map("stripe_subscription_id")
+  priceId              String?   @map("price_id")
+  currentPeriodEnd     DateTime? @map("current_period_end") @db.Timestamptz(6)
+  createdAt            DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user                 User      @relation(fields: [userId], references: [id])
+
+  @@unique([userId])
+  @@index([userId], map: "idx_subscriptions_user_id") 
+  @@map("subscriptions")
+}
+
+model GeneratedImage {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id")
+  imageUrl  String   @map("image_url")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId], map: "idx_generated_images_user_id")
+  @@map("generated_images")
+}
+
+model CustomPrompt {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id")
+  promptText String  @map("prompt_text")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("custom_prompts")
+  @@index([userId])
+}
