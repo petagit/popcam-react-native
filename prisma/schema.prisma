@@ -52,10 +52,12 @@ model GeneratedImage {
 }
 
 model CustomPrompt {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId    String   @map("user_id")
-  promptText String  @map("prompt_text")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String   @map("user_id")
+  title        String?  @map("title")
+  promptText   String   @map("prompt_text")
+  thumbnailUrl String?  @map("thumbnail_url")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@map("custom_prompts")
   @@index([userId])

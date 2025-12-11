@@ -11,7 +11,7 @@ import {
   Dimensions,
   Modal,
   Pressable,
-  Vibration,
+
   Platform,
   Linking,
 } from 'react-native';
@@ -37,7 +37,7 @@ export default function AnalysisScreen(): React.JSX.Element {
   const route = useRoute<AnalysisScreenRouteProp>();
   const { user } = useUser();
   const { imageUri, infographicUri, showInfographicFirst = false } = route.params;
-  
+
   const [analysis, setAnalysis] = useState<ImageAnalysis | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [showingInfographic, setShowingInfographic] = useState<boolean>(showInfographicFirst);
@@ -52,7 +52,7 @@ export default function AnalysisScreen(): React.JSX.Element {
     try {
       const analyses: ImageAnalysis[] = await storageService.getAnalyses(user?.id);
       const currentAnalysis = analyses.find((item: ImageAnalysis) => item.imageUri === imageUri);
-      
+
       if (currentAnalysis) {
         setAnalysis(currentAnalysis);
       } else {
@@ -279,7 +279,7 @@ export default function AnalysisScreen(): React.JSX.Element {
 
       const asset = await MediaLibrary.createAssetAsync(workingUri);
       await MediaLibrary.createAlbumAsync('PopCam', asset, false);
-      
+
       // Clean up temporary file
       if (cleanupUri) {
         try {
@@ -288,7 +288,7 @@ export default function AnalysisScreen(): React.JSX.Element {
           console.warn('Failed to clean up temporary file:', cleanupError);
         }
       }
-      
+
       Alert.alert(
         'Success!',
         'Photo saved to your photo library.',
@@ -310,9 +310,8 @@ export default function AnalysisScreen(): React.JSX.Element {
   };
 
   const handleImagePress = (): void => {
-    // Add light haptic feedback
-    Vibration.vibrate(1);
-    
+
+
     if (analysis?.hasInfographic && analysis.infographicUri) {
       setShowingInfographic(!showingInfographic);
     }
@@ -369,40 +368,40 @@ export default function AnalysisScreen(): React.JSX.Element {
   return (
     <View style={tw`flex-1 bg-white`}>
       <StatusBar style="dark" />
-      
+
       {/* Full Screen Image */}
       <View style={tw`flex-1 relative`}>
-        <TouchableOpacity 
-          onPress={handleImagePress} 
+        <TouchableOpacity
+          onPress={handleImagePress}
           style={tw`w-full h-full`}
           disabled={!analysis?.hasInfographic}
         >
-          <Image 
-            source={{ uri: getCurrentImageUri() }} 
-            style={tw`w-full h-full`} 
-            resizeMode="contain" 
+          <Image
+            source={{ uri: getCurrentImageUri() }}
+            style={tw`w-full h-full`}
+            resizeMode="contain"
           />
         </TouchableOpacity>
-        
+
         {/* Overlay Header Buttons */}
         <SafeAreaView style={tw`absolute top-0 left-0 right-0`}>
           <View style={tw`flex-row justify-between items-center px-5 py-4`}>
-            <TouchableOpacity 
-              style={tw`bg-black bg-opacity-60 rounded-full px-4 py-2 flex-row items-center`} 
+            <TouchableOpacity
+              style={tw`bg-black bg-opacity-60 rounded-full px-4 py-2 flex-row items-center`}
               onPress={() => navigation.goBack()}
             >
               <MaterialIcons name="arrow-back" size={18} color="#ffffff" />
               <Text style={tw`text-base text-white font-semibold ml-1`}>Back</Text>
             </TouchableOpacity>
-            
-            <CameraButton 
+
+            <CameraButton
               onPress={() => navigation.navigate('Camera')}
               size="medium"
               style={tw`shadow-lg`}
             />
           </View>
         </SafeAreaView>
-        
+
         {/* Image Type Indicator */}
         {analysis?.hasInfographic && (
           <View style={tw`absolute bottom-20 left-4 bg-black bg-opacity-70 px-3 py-2 rounded-lg`}>
@@ -410,10 +409,10 @@ export default function AnalysisScreen(): React.JSX.Element {
             <Text style={tw`text-gray-300 text-xs mt-1`}>Tap to toggle</Text>
           </View>
         )}
-        
+
         {/* Floating Action Button */}
         <View style={tw`absolute bottom-8 right-6`}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={tw`bg-blue-500 w-14 h-14 rounded-full items-center justify-center shadow-lg`}
             onPress={openDrawer}
           >
@@ -429,45 +428,45 @@ export default function AnalysisScreen(): React.JSX.Element {
         visible={drawerVisible}
         onRequestClose={closeDrawer}
       >
-        <Pressable 
+        <Pressable
           style={tw`flex-1 bg-black bg-opacity-50 justify-end`}
           onPress={closeDrawer}
         >
-          <Pressable 
+          <Pressable
             style={tw`bg-white rounded-t-3xl p-6 pb-8`}
             onPress={(e: any) => e.stopPropagation()}
           >
             {/* Drawer Handle */}
             <View style={tw`w-12 h-1 bg-gray-300 rounded-full self-center mb-6`} />
-            
-            
+
+
             {/* Action Buttons */}
             <View style={tw`gap-4`}>
-              <TouchableOpacity 
-                style={tw`bg-green-500 rounded-xl py-4 items-center flex-row justify-center`} 
+              <TouchableOpacity
+                style={tw`bg-green-500 rounded-xl py-4 items-center flex-row justify-center`}
                 onPress={handleActionAndCloseDrawer(handleSaveToPhotos)}
               >
                 <MaterialIcons name="save-alt" size={18} color="#ffffff" />
                 <Text style={tw`text-white text-base font-semibold ml-2`}>Save to Photos</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={tw`bg-blue-500 rounded-xl py-4 items-center flex-row justify-center`} 
+
+              <TouchableOpacity
+                style={tw`bg-blue-500 rounded-xl py-4 items-center flex-row justify-center`}
                 onPress={handleActionAndCloseDrawer(openShareSheet)}
               >
                 <MaterialIcons name="share" size={18} color="#ffffff" />
                 <Text style={tw`text-white text-base font-semibold ml-2`}>Share</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={tw`bg-white rounded-xl py-4 items-center border-2 border-red-500 flex-row justify-center`} 
+              <TouchableOpacity
+                style={tw`bg-white rounded-xl py-4 items-center border-2 border-red-500 flex-row justify-center`}
                 onPress={handleActionAndCloseDrawer(handleDelete)}
               >
                 <MaterialIcons name="delete" size={18} color="#ef4444" />
                 <Text style={tw`text-red-500 text-base font-semibold ml-2`}>Delete Photo</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={tw`bg-gray-200 rounded-xl py-4 items-center mt-2`} 
+
+              <TouchableOpacity
+                style={tw`bg-gray-200 rounded-xl py-4 items-center mt-2`}
                 onPress={closeDrawer}
               >
                 <Text style={tw`text-gray-600 text-base font-semibold`}>Cancel</Text>
@@ -476,7 +475,7 @@ export default function AnalysisScreen(): React.JSX.Element {
           </Pressable>
         </Pressable>
       </Modal>
-      
+
       {/* Share Sheet Modal */}
       <Modal
         animationType="slide"
@@ -484,7 +483,7 @@ export default function AnalysisScreen(): React.JSX.Element {
         visible={shareVisible}
         onRequestClose={closeShareSheet}
       >
-        <Pressable 
+        <Pressable
           style={tw`flex-1 bg-black/40 justify-end`}
           onPress={closeShareSheet}
         >

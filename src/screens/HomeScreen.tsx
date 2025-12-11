@@ -86,16 +86,6 @@ export default function HomeScreen(): React.JSX.Element {
       iconBackground: '#bfdbfe',
     },
     {
-      id: 'nano-banana',
-      title: 'Nano Banana',
-      subtitle: 'Experiment with prompts',
-      icon: 'auto-awesome',
-      onPress: handleNanoBananaPress,
-      accentColor: '#d97706',
-      backgroundColor: '#fef3c7',
-      iconBackground: '#fde68a',
-    },
-    {
       id: 'settings',
       title: 'Settings',
       subtitle: 'Tune your experience',
@@ -108,7 +98,7 @@ export default function HomeScreen(): React.JSX.Element {
   ];
 
   const handleAnalysisPress = (analysis: ImageAnalysis): void => {
-    navigation.navigate('Analysis', { 
+    navigation.navigate('Analysis', {
       imageUri: analysis.imageUri,
       infographicUri: analysis.infographicUri,
       showInfographicFirst: analysis.hasInfographic && !!analysis.infographicUri

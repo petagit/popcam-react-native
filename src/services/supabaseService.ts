@@ -178,42 +178,114 @@ class SupabaseService {
     }
   }
 
-  async getCustomPrompts(userId: string): Promise<string[]> {
+  async getCustomPrompts(userId: string): Promise<{ id: string; prompt_text: string; title?: string; thumbnail_url?: string }[]> {
     try {
+      console.log('[SupabaseService] getCustomPrompts called for:', userId);
       const { data, error } = await this.supabase
         .from('custom_prompts')
-        .select('prompt_text')
+        .select('id, prompt_text, title, thumbnail_url')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(20);
 
       if (error) {
-        console.error('Error fetching custom prompts:', error);
+        console.error('[SupabaseService] Error fetching custom prompts:', error);
         return [];
       }
 
-      return data.map((item) => item.prompt_text);
+      console.log('[SupabaseService] fetch success. Count:', data?.length);
+      return data.map((item) => ({
+        id: item.id,
+        prompt_text: item.prompt_text,
+        title: item.title,
+        thumbnail_url: item.thumbnail_url
+      }));
     } catch (error) {
-      console.error('Error in getCustomPrompts:', error);
+      console.error('[SupabaseService] Error in getCustomPrompts:', error);
       return [];
     }
   }
 
-  async saveCustomPrompt(userId: string, prompt: string): Promise<void> {
+  async deleteCustomPrompt(id: string, userId: string): Promise<boolean> {
     try {
       const { error } = await this.supabase
+        .from('custom_prompts')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userId); // Extra safety to ensure user owns the prompt
+
+      if (error) {
+        console.error('[SupabaseService] Error deleting custom prompt:', error);
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.error('[SupabaseService] Error in deleteCustomPrompt:', error);
+      return false;
+    }
+  }
+
+  async saveCustomPrompt(userId: string, prompt: string, title?: string, thumbnailUrl?: string): Promise<string | null> {
+    try {
+      const { data, error } = await this.supabase
         .from('custom_prompts')
         .insert({
           user_id: userId,
           prompt_text: prompt,
-        });
+          title: title,
+          thumbnail_url: thumbnailUrl
+        })
+        .select('id')
+        .single();
 
       if (error) {
         console.error('Error saving custom prompt:', error);
         throw error;
       }
+
+      return data?.id || null;
     } catch (error) {
       console.error('Error in saveCustomPrompt:', error);
+      throw error;
+    }
+  }
+
+  async updateCustomPrompt(id: string, userId: string, updates: { prompt_text?: string; title?: string; thumbnail_url?: string }): Promise<boolean> {
+    try {
+      const { error } = await this.supabase
+        .from('custom_prompts')
+        .update(updates)
+        .eq('id', id)
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error('Error updating custom prompt:', error);
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.error('Error in updateCustomPrompt:', error);
+      return false;
+    }
+  }
+
+  async saveGeneratedImage(userId: string, imageUrl: string, prompt?: string): Promise<void> {
+    try {
+      const { error } = await this.supabase
+        .from('generated_images')
+        .insert({
+          user_id: userId,
+          image_url: imageUrl,
+          created_at: new Date().toISOString(),
+        }); // Note: prompt not in schema yet for this table based on previous check, but could be added. 
+      // Previous check showed: imageUrl, userId, createdAt.
+
+      if (error) {
+        console.error('Error saving generated image metadata:', error);
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error in saveGeneratedImage:', error);
       throw error;
     }
   }

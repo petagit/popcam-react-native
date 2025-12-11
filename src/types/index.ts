@@ -14,6 +14,7 @@ export interface ImageAnalysis {
   infographicPrompt?: string;
   hasInfographic: boolean;
   userId?: string;
+  cloudUrl?: string;
 }
 
 export interface CameraPermission {

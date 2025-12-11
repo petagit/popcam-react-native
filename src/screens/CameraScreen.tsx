@@ -22,6 +22,9 @@ import GlassButton from '../components/GlassButton';
 import { MaterialIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { NANO_BANANA_PRESETS } from '../lib/nanobanana-presets';
+import { VolumeManager } from 'react-native-volume-manager';
+import { DeviceMotion } from 'expo-sensors';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 
 type CameraScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Camera'>;
 type CameraFacing = 'front' | 'back';
@@ -44,6 +47,52 @@ export default function CameraScreen(): React.JSX.Element {
     requestPermissions();
     loadLastGalleryImage();
     updateCurrentPreset();
+  }, []);
+
+  // Monitor Device Orientation
+  const [deviceOrientation, setDeviceOrientation] = useState<number>(0);
+
+  useEffect(() => {
+    if (DeviceMotion) {
+      DeviceMotion.setUpdateInterval(500);
+      const subscription = DeviceMotion.addListener((data) => {
+        // Logic to determine orientation from accelerationIncludingGravity
+        // iOS: x approaches -1 or 1 in landscape, y approaches -1 or 1 in portrait
+        // Note: Values depend on platform (Android vs iOS). Expo attempts to normalize but verify.
+        // Standard logic:
+        // Portrait: y < -0.5
+        // Upside Down: y > 0.5
+        // Landscape Right (Home Button Left): x > 0.5
+        // Landscape Left (Home Button Right): x < -0.5
+
+        const { x, y } = data.accelerationIncludingGravity;
+
+        let orientation = 0;
+        if (Math.abs(x) > Math.abs(y)) {
+          // Landscape
+          // iOS: x > 0 (Home Left/Landscape Right) -> 90 deg?
+          // Let's assume standard behavior:
+          // If x > 0.5 => Landscape Left (rotate -90 or 270)
+          // If x < -0.5 => Landscape Right (rotate 90)
+          // We'll test this or provide a reasonable guess.
+          if (x > 0) {
+            orientation = 90;
+          } else {
+            orientation = 270;
+          }
+        } else {
+          // Portrait
+          if (y < 0) {
+            orientation = 0;
+          } else {
+            orientation = 180;
+          }
+        }
+        setDeviceOrientation(orientation);
+      });
+
+      return () => subscription.remove();
+    }
   }, []);
 
   useFocusEffect(
@@ -85,6 +134,21 @@ export default function CameraScreen(): React.JSX.Element {
           setCurrentPresetId(preset.id);
           setCurrentPresetTitle(preset.title);
           return;
+        } else {
+          // ID exists but not in standard list -> Custom History Item
+          const customText: string | undefined = prefs.nanoBananaCustomPromptText;
+          if (customText && customText.trim().length > 0) {
+            setCurrentPresetId(preferredId);
+            setCurrentCustomPromptText(customText.trim());
+            // Truncate title
+            const trimmed = customText.trim();
+            if (trimmed.length > 42) {
+              setCurrentPresetTitle(trimmed.substring(0, 40) + '...');
+            } else {
+              setCurrentPresetTitle(trimmed);
+            }
+            return;
+          }
         }
       }
 
@@ -98,6 +162,7 @@ export default function CameraScreen(): React.JSX.Element {
       console.warn('Failed to load preset preference:', error);
     }
   };
+
 
   const requestPermissions = async (): Promise<void> => {
     try {
@@ -145,10 +210,8 @@ export default function CameraScreen(): React.JSX.Element {
       presetTitle: options?.presetTitle || currentPresetTitle,
       autoGenerate: true,
       // If we are using custom preset, use the saved custom prompt text if not overridden by options
-      customPrompt: (options?.presetId === 'custom' || currentPresetId === 'custom')
-        ? (options?.presetTitle === 'Custom Prompt' ? currentCustomPromptText : options?.presetTitle) // Logic bit tricky here because presetTitle is repurposed. 
-        // Simpler: if options has a prompt (passed as presetTitle in some calls? No.)
-        // Let's use currentCustomPromptText as default if ID is custom.
+      customPrompt: (options?.presetId === 'custom' || currentPresetId === 'custom' || !NANO_BANANA_PRESETS.some(p => p.id === (options?.presetId || currentPresetId)))
+        ? (currentCustomPromptText) // Always prefer the stored text for custom items
         : undefined,
     });
   };
@@ -178,7 +241,35 @@ export default function CameraScreen(): React.JSX.Element {
       });
 
       if (photo?.uri) {
-        await handleImageReady(photo.uri, options);
+        let finalUri = photo.uri;
+
+        // Auto-rotate if needed
+        if (deviceOrientation !== 0) {
+          try {
+            // Calculate rotation needed
+            // User reported images are upside down (180 deg off).
+            // Previous logic: 90 -> -90, 270 -> 90.
+            // New logic: 90 -> 90, 270 -> -90.
+
+            let rotation = 0;
+            if (deviceOrientation === 90) rotation = 90;
+            if (deviceOrientation === 270) rotation = -90; // or 270
+            if (deviceOrientation === 180) rotation = 180;
+
+            if (rotation !== 0) {
+              const manipResult = await manipulateAsync(
+                photo.uri,
+                [{ rotate: rotation }],
+                { compress: 0.85, format: SaveFormat.JPEG }
+              );
+              finalUri = manipResult.uri;
+            }
+          } catch (rotError) {
+            console.warn('Failed to auto-rotate image:', rotError);
+          }
+        }
+
+        await handleImageReady(finalUri, options);
       } else {
         Alert.alert('Capture Failed', 'No image was captured. Please try again.');
       }
@@ -198,6 +289,59 @@ export default function CameraScreen(): React.JSX.Element {
     });
   };
 
+  // Hardware Button (Volume) Listener for Capture
+  useEffect(() => {
+    let volumeListener: any = null;
+
+    const setupVolumeListener = async () => {
+      try {
+        if (!VolumeManager) {
+          console.warn("VolumeManager is not available");
+          return;
+        }
+        // Initial setup
+        await VolumeManager.showNativeVolumeUI({ enabled: false });
+
+        // Listen for changes
+        // Using a direct call to takePicture inside the listener
+        volumeListener = VolumeManager.addVolumeListener(async (result) => {
+          if (!isCapturing && hasPermission) {
+            console.log("Hardware button pressed (volume change), taking picture...");
+            // We need to call the latest takePicture.
+            // Since this effect might not re-bind often, relying on closure might be stale if deps aren't perfect.
+            // However, takePicture relies on state.
+            // Let's assume takePicture is stable enough or re-binds.
+            // But wait, takePicture is defined above, but it closes over `currentPresetId` etc.
+            // We should use a ref for the latest takePicture function to avoid re-binding the listener constantly.
+            takePictureRef.current();
+          }
+        });
+      } catch (err) {
+        console.warn("Failed to setup hardware button listener", err);
+      }
+    };
+
+    setupVolumeListener().catch(err => console.warn("Error in setupVolumeListener", err));
+
+    return () => {
+      if (volumeListener) {
+        volumeListener.remove();
+      }
+      try {
+        if (VolumeManager && VolumeManager.showNativeVolumeUI) {
+          VolumeManager.showNativeVolumeUI({ enabled: true });
+        }
+      } catch (e) {
+        // Ignore warnings on cleanup
+      }
+    };
+  }, [hasPermission, isCapturing]); // removed takePicture from deps to avoid cycle, used ref below
+
+  // Keep a ref to the latest takePicture
+  const takePictureRef = useRef(takePicture);
+  useEffect(() => {
+    takePictureRef.current = takePicture;
+  }, [takePicture]);
 
 
   const selectFromGallery = async (): Promise<void> => {
@@ -277,18 +421,20 @@ export default function CameraScreen(): React.JSX.Element {
         <GlassButton size={44} onPress={selectFromGallery}>
           <MaterialIcons name="file-upload" size={20} color="#111827" />
         </GlassButton>
-        <BlurView
-          intensity={25}
-          tint="light"
-          style={[tw`px-4 py-2 rounded-full flex-row items-center`, { backgroundColor: 'transparent', overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.45)' }]}
-        >
-          <MaterialIcons name="diamond" size={18} color="#111827" style={tw`mr-1`} />
-          {creditsLoading ? (
-            <ActivityIndicator size="small" color="#111827" />
-          ) : (
-            <Text style={tw`text-sm text-gray-900 font-bold`}>{credits}</Text>
-          )}
-        </BlurView>
+        <TouchableOpacity onPress={() => navigation.navigate('PurchaseCredits')} activeOpacity={0.8}>
+          <BlurView
+            intensity={25}
+            tint="light"
+            style={[tw`px-4 py-2 rounded-full flex-row items-center`, { backgroundColor: 'transparent', overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.45)' }]}
+          >
+            <MaterialIcons name="bolt" size={18} color="#111827" style={tw`mr-1`} />
+            {creditsLoading ? (
+              <ActivityIndicator size="small" color="#111827" />
+            ) : (
+              <Text style={tw`text-sm text-gray-900 font-bold`}>{credits}</Text>
+            )}
+          </BlurView>
+        </TouchableOpacity>
       </View>
 
       {/* Preset Name Display */}

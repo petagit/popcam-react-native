@@ -5,7 +5,52 @@ import { supabaseService } from './supabaseService';
 import { STORAGE_KEYS, APP_CONFIG } from '../constants/config';
 import { imageUtils } from '../utils/imageUtils';
 
+export interface LocalPreset {
+  id: string;
+  title: string;
+  prompt: string;
+  imageUri: string | null;
+  timestamp: number;
+}
+
 class StorageService {
+  // ... existing methods ...
+
+  async getLocalPresets(userId?: string): Promise<LocalPreset[]> {
+    try {
+      const storageKey = userId ? `${STORAGE_KEYS.LOCAL_PRESETS}_${userId}` : STORAGE_KEYS.LOCAL_PRESETS;
+      const json = await AsyncStorage.getItem(storageKey);
+      return json ? JSON.parse(json) : [];
+    } catch (error) {
+      console.error('Error loading local presets:', error);
+      return [];
+    }
+  }
+
+  async saveLocalPreset(preset: LocalPreset, userId?: string): Promise<void> {
+    try {
+      const storageKey = userId ? `${STORAGE_KEYS.LOCAL_PRESETS}_${userId}` : STORAGE_KEYS.LOCAL_PRESETS;
+      const current = await this.getLocalPresets(userId);
+      const updated = [preset, ...current];
+      await AsyncStorage.setItem(storageKey, JSON.stringify(updated));
+    } catch (error) {
+      console.error('Error saving local preset:', error);
+      throw error;
+    }
+  }
+
+  async deleteLocalPreset(presetId: string, userId?: string): Promise<void> {
+    try {
+      const storageKey = userId ? `${STORAGE_KEYS.LOCAL_PRESETS}_${userId}` : STORAGE_KEYS.LOCAL_PRESETS;
+      const current = await this.getLocalPresets(userId);
+      const updated = current.filter(p => p.id !== presetId);
+      await AsyncStorage.setItem(storageKey, JSON.stringify(updated));
+    } catch (error) {
+      console.error('Error deleting local preset:', error);
+      throw error;
+    }
+  }
+
   // Helper method to get user-specific storage key
   private getUserAnalysesKey(userId?: string): string {
     return userId ? STORAGE_KEYS.ANALYSES + '_' + userId : STORAGE_KEYS.ANALYSES;
@@ -55,10 +100,52 @@ class StorageService {
       }
 
       const analyses: ImageAnalysis[] = JSON.parse(analysesJson);
-      return analyses.map((analysis: any) => ({
-        ...analysis,
-        timestamp: new Date(analysis.timestamp),
-      }));
+
+      // Verification and Cleanup Logic
+      const validatedAnalyses: ImageAnalysis[] = [];
+      let hasChanges = false;
+
+      for (const analysis of analyses) {
+        // Parse date
+        const parsedAnalysis = {
+          ...analysis,
+          timestamp: new Date(analysis.timestamp),
+        };
+
+        // Check if local file exists
+        const { exists } = await imageUtils.verifyLocalImage(parsedAnalysis.imageUri);
+
+        if (exists) {
+          validatedAnalyses.push(parsedAnalysis);
+          continue;
+        }
+
+        // Local file missing. Check for Cloud URL
+        if (parsedAnalysis.cloudUrl) {
+          console.log(`[Storage] Local file missing for ${parsedAnalysis.id}, falling back to Cloud URL`);
+          // Use cloud URL as imageUri for display
+          // We assume cloud URL is valid/accessible if present
+          validatedAnalyses.push({
+            ...parsedAnalysis,
+            imageUri: parsedAnalysis.cloudUrl,
+          });
+          hasChanges = true;
+          continue;
+        }
+
+        // No local file and no cloud URL -> Cleanup (Data lost/App deleted)
+        console.warn(`[Storage] Cleaning up invalid analysis ${parsedAnalysis.id} (no local file, no cloud backup)`);
+        hasChanges = true;
+      }
+
+      // If we cleaned up or updated entries, save the new list to persist the fix
+      if (hasChanges && validatedAnalyses.length !== analyses.length) {
+        // We defer saving slightly or just fire and forget to avoid blocking read too long? 
+        // Better to await to ensure consistency.
+        this.saveAnalyses(validatedAnalyses, userId).catch(err => console.error('Error persisting cleanup:', err));
+      }
+
+      return validatedAnalyses;
     } catch (error) {
       console.error('Error loading analyses:', error);
       return [];
@@ -266,13 +353,13 @@ class StorageService {
     }
   }
 
-  async getCustomPromptHistory(userId?: string): Promise<string[]> {
+  async getCustomPromptHistory(userId?: string): Promise<{ id: string; prompt_text: string; title?: string; thumbnail_url?: string }[]> {
     try {
       if (userId) {
         return await supabaseService.getCustomPrompts(userId);
       }
 
-      // Fallback to local storage if no user ID (though app usually requires login)
+      // Fallback local storage
       const storageKey = STORAGE_KEYS.CUSTOM_PROMPT_HISTORY;
       const historyJson = await AsyncStorage.getItem(storageKey);
       return historyJson ? JSON.parse(historyJson) : [];
@@ -282,28 +369,90 @@ class StorageService {
     }
   }
 
-  async saveCustomPromptToHistory(prompt: string, userId?: string): Promise<void> {
+  async deleteCustomPromptFromHistory(id: string, userId?: string): Promise<void> {
     try {
-      if (!prompt || !prompt.trim()) return;
+      if (userId) {
+        await supabaseService.deleteCustomPrompt(id, userId);
+        return;
+      }
+
+      // Fallback local
+      const storageKey = STORAGE_KEYS.CUSTOM_PROMPT_HISTORY;
+      const currentHistory = await this.getCustomPromptHistory();
+      const filteredHistory = currentHistory.filter(p => p.id !== id);
+      await AsyncStorage.setItem(storageKey, JSON.stringify(filteredHistory));
+    } catch (error) {
+      console.error('Error deleting prompt:', error);
+      throw error;
+    }
+  }
+
+  async saveCustomPromptToHistory(
+    prompt: string,
+    userId?: string,
+    title?: string,
+    thumbnailUrl?: string
+  ): Promise<string | null> {
+    try {
+      if (!prompt || !prompt.trim()) return null;
 
       if (userId) {
-        // Save to Supabase
-        // We might want to deduplicate? The DB insert is just appending log-style. 
-        // We can verify uniqueness in select or keep appending. 
-        // For history list, we just want distinct items or most recent.
-        // Let's just append every save action as per requirement to "store user's custom prompts".
-        await supabaseService.saveCustomPrompt(userId, prompt);
-        return;
+        return await supabaseService.saveCustomPrompt(userId, prompt, title, thumbnailUrl);
       }
 
       // Fallback local logic
       const storageKey = STORAGE_KEYS.CUSTOM_PROMPT_HISTORY;
       const currentHistory = await this.getCustomPromptHistory();
-      const filteredHistory = currentHistory.filter(p => p !== prompt);
-      const newHistory = [prompt, ...filteredHistory].slice(0, 20);
+      // Simple local ID generation for fallback
+      const newId = Date.now().toString();
+      const newItem = {
+        id: newId,
+        prompt_text: prompt,
+        title: title,
+        thumbnail_url: thumbnailUrl
+      };
+
+      // Filter out exact duplicate prompt text if we want to avoid dupes? 
+      // But user might want same prompt with different image/title. 
+      // Let's rely on ID uniqueness or just append. 
+      // Original logic filtered by prompt_text to avoid dupes.
+      const filteredHistory = currentHistory.filter(p => p.prompt_text !== prompt);
+      const newHistory = [newItem, ...filteredHistory].slice(0, 20);
       await AsyncStorage.setItem(storageKey, JSON.stringify(newHistory));
+      return newId;
     } catch (error) {
       console.error('Error saving custom prompt history:', error);
+      throw error;
+    }
+  }
+
+  async updateCustomPromptInHistory(
+    id: string,
+    updates: { prompt_text?: string; title?: string; thumbnail_url?: string },
+    userId?: string
+  ): Promise<void> {
+    try {
+      if (userId) {
+        const success = await supabaseService.updateCustomPrompt(id, userId, updates);
+        if (!success) {
+          throw new Error('Supabase update failed');
+        }
+        return;
+      }
+
+      // Fallback local
+      const storageKey = STORAGE_KEYS.CUSTOM_PROMPT_HISTORY;
+      const currentHistory = await this.getCustomPromptHistory();
+      const updatedHistory = currentHistory.map(item => {
+        if (item.id === id) {
+          return { ...item, ...updates };
+        }
+        return item;
+      });
+      await AsyncStorage.setItem(storageKey, JSON.stringify(updatedHistory));
+    } catch (error) {
+      console.error('Error updating custom prompt:', error);
+      throw error;
     }
   }
 }

@@ -1,10 +1,8 @@
 import {
   initConnection,
-  getProducts,
+  fetchProducts,
   requestPurchase,
-  finishTransactionIOS,
-  finishTransactionAndroid,
-  getPendingPurchasesIOS,
+  finishTransaction,
   getAvailablePurchases,
   endConnection,
   Product,
@@ -24,15 +22,15 @@ export interface InAppProduct {
 
 class StoreKitService {
   private productIds: string[] = [
-    'com.popcam.credits.10',
-    'com.popcam.credits.50',
-    'com.popcam.credits.100',
+    'com.popcam.credits.24',
+    'com.popcam.credits.48',
+    'com.popcam.credits.96',
   ];
 
   private creditMapping: Record<string, number> = {
-    'com.popcam.credits.10': 10,
-    'com.popcam.credits.50': 50,
-    'com.popcam.credits.100': 100,
+    'com.popcam.credits.24': 24,
+    'com.popcam.credits.48': 48,
+    'com.popcam.credits.96': 96,
   };
 
   /**
@@ -55,9 +53,9 @@ class StoreKitService {
    */
   async getProducts(): Promise<InAppProduct[]> {
     try {
-      const products: Product[] = await getProducts({ skus: this.productIds });
+      const products: Product[] = (await fetchProducts({ skus: this.productIds })) as Product[];
 
-      return products.map((product: Product) => ({
+      return products.map((product: any) => ({
         productId: product.productId,
         title: product.title,
         description: product.description,
@@ -77,7 +75,17 @@ class StoreKitService {
    */
   async purchaseProduct(productId: string): Promise<Purchase> {
     try {
-      const purchase: Purchase = await requestPurchase({ sku: productId });
+      if (!productId) {
+        throw new Error('Product ID is required for purchase');
+      }
+
+      console.log(`Initiating purchase for product: ${productId}`);
+
+      const purchase = await requestPurchase({
+        sku: productId,
+        andDangerouslyFinishTransactionAutomaticallyIOS: false,
+      } as any) as unknown as Purchase;
+
       return purchase;
     } catch (error) {
       console.error('Error purchasing product:', error);
@@ -90,11 +98,7 @@ class StoreKitService {
    */
   async finishTransaction(purchase: Purchase): Promise<void> {
     try {
-      if (Platform.OS === 'ios') {
-        await finishTransactionIOS(purchase.transactionId);
-      } else {
-        await finishTransactionAndroid(purchase.purchaseToken || '', true);
-      }
+      await finishTransaction({ purchase, isConsumable: true });
     } catch (error) {
       console.error('Error finishing transaction:', error);
       throw error;
@@ -125,12 +129,7 @@ class StoreKitService {
    */
   async getPendingPurchases(): Promise<Purchase[]> {
     try {
-      if (Platform.OS === 'ios') {
-        return await getPendingPurchasesIOS();
-      } else {
-        const purchases: Purchase[] = await getAvailablePurchases();
-        return purchases;
-      }
+      return await getAvailablePurchases();
     } catch (error) {
       console.error('Error getting pending purchases:', error);
       return [];

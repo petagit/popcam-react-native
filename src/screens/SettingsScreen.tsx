@@ -18,6 +18,7 @@ import { storageService } from '../services/storageService';
 import { supabaseService } from '../services/supabaseService';
 import { MaterialIcons } from '@expo/vector-icons';
 import GlassButton from '../components/GlassButton';
+import { useCredits } from '../hooks/useCredits';
 
 type SettingsScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Settings'>;
 
@@ -25,16 +26,19 @@ interface UserPreferences {
   autoSave: boolean;
   highQuality: boolean;
   showTags: boolean;
+  cloudStorage: boolean;
 }
 
 export default function SettingsScreen() {
   const navigation = useNavigation<SettingsScreenNavigationProp>();
   const { user } = useUser();
   const { signOut } = useClerk();
+  const { credits, isLoading: creditsLoading } = useCredits();
   const [preferences, setPreferences] = useState<UserPreferences>({
     autoSave: true,
     highQuality: false,
     showTags: true,
+    cloudStorage: false,
   });
   const [isDeletingAccount, setIsDeletingAccount] = useState<boolean>(false);
 
@@ -57,7 +61,7 @@ export default function SettingsScreen() {
   const handlePreferenceChange = async (key: keyof UserPreferences, value: boolean): Promise<void> => {
     const newPreferences = { ...preferences, [key]: value };
     setPreferences(newPreferences);
-    
+
     // Save preferences immediately
     try {
       await storageService.saveUserPreferences(newPreferences);
@@ -82,6 +86,7 @@ export default function SettingsScreen() {
                 autoSave: true,
                 highQuality: false,
                 showTags: true,
+                cloudStorage: false,
               });
               Alert.alert('Success', 'All data cleared successfully');
             } catch (error) {
@@ -194,15 +199,15 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView style={tw`flex-1 bg-gray-50`}>
       <StatusBar style="dark" />
-      
+
       {/* Header */}
       <View style={tw`flex-row justify-between items-center px-5 py-4 bg-white border-b border-gray-200`}>
         <GlassButton size={40} onPress={() => navigation.goBack()}>
           <MaterialIcons name="arrow-back" size={20} color="#111827" />
         </GlassButton>
-        
+
         <Text style={tw`text-lg font-semibold text-gray-800`}>Settings</Text>
-        
+
         <View style={tw`min-w-15`} />
       </View>
 
@@ -210,7 +215,7 @@ export default function SettingsScreen() {
         {/* Preferences Section */}
         <View style={tw`bg-white mx-4 mt-4 p-4 rounded-xl shadow-sm`}>
           <Text style={tw`text-lg font-bold text-gray-800 mb-4`}>Preferences</Text>
-          
+
           <View style={tw`flex-row items-center py-3 border-b border-gray-100`}>
             <View style={tw`flex-1 mr-4`}>
               <Text style={tw`text-base font-medium text-gray-800 mb-1`}>Auto-save Analyses</Text>
@@ -225,7 +230,7 @@ export default function SettingsScreen() {
               thumbColor="#ffffff"
             />
           </View>
-          
+
           <View style={tw`flex-row items-center py-3 border-b border-gray-100`}>
             <View style={tw`flex-1 mr-4`}>
               <Text style={tw`text-base font-medium text-gray-800 mb-1`}>High Quality Images</Text>
@@ -240,7 +245,7 @@ export default function SettingsScreen() {
               thumbColor="#ffffff"
             />
           </View>
-          
+
           <View style={tw`flex-row items-center py-3`}>
             <View style={tw`flex-1 mr-4`}>
               <Text style={tw`text-base font-medium text-gray-800 mb-1`}>Show Tags</Text>
@@ -255,20 +260,43 @@ export default function SettingsScreen() {
               thumbColor="#ffffff"
             />
           </View>
+
+          <View style={tw`flex-row items-center py-3`}>
+            <View style={tw`flex-1 mr-4`}>
+              <Text style={tw`text-base font-medium text-gray-800 mb-1`}>Cloud Storage</Text>
+              <Text style={tw`text-sm text-gray-600 leading-4`}>
+                Backup generated images to the cloud
+              </Text>
+            </View>
+            <Switch
+              value={preferences.cloudStorage}
+              onValueChange={(value: boolean) => handlePreferenceChange('cloudStorage', value)}
+              trackColor={{ false: '#e5e7eb', true: '#3b82f6' }}
+              thumbColor="#ffffff"
+            />
+          </View>
         </View>
 
         {/* Credits Section */}
         {user && (
           <View style={tw`bg-white mx-4 mt-4 p-4 rounded-xl shadow-sm`}>
-            <Text style={tw`text-lg font-bold text-gray-800 mb-4`}>Credits</Text>
-            
-            <TouchableOpacity 
-              style={tw`py-3 px-4 bg-blue-500 rounded-lg`} 
+            <View style={tw`flex-row justify-between items-center mb-4`}>
+              <Text style={tw`text-lg font-bold text-gray-800`}>Credits</Text>
+              <View style={tw`flex-row items-center bg-gray-100 px-3 py-1 rounded-full`}>
+                <MaterialIcons name="bolt" size={16} color="#4b5563" style={tw`mr-1`} />
+                <Text style={tw`font-semibold text-gray-900`}>
+                  {creditsLoading ? '...' : credits}
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={tw`py-3 px-4 bg-blue-500 rounded-lg`}
               onPress={() => navigation.navigate('PurchaseCredits')}
             >
               <View style={tw`flex-row items-center justify-center`}>
                 <MaterialIcons name="shopping-cart" size={20} color="#FFFFFF" />
-                <Text style={tw`text-white text-center font-semibold ml-2`}>Buy Credits</Text>
+                <Text style={tw`text-white text-center font-semibold ml-2`}>Buy More Credit</Text>
               </View>
             </TouchableOpacity>
           </View>
@@ -277,17 +305,17 @@ export default function SettingsScreen() {
         {/* Data Management */}
         <View style={tw`bg-white mx-4 mt-4 p-4 rounded-xl shadow-sm`}>
           <Text style={tw`text-lg font-bold text-gray-800 mb-4`}>Data Management</Text>
-          
-          <TouchableOpacity 
-            style={tw`py-3 px-4 bg-orange-500 rounded-lg mb-3`} 
+
+          <TouchableOpacity
+            style={tw`py-3 px-4 bg-orange-500 rounded-lg mb-3`}
             onPress={handleClearAllData}
           >
             <Text style={tw`text-white text-center font-semibold`}>Clear All Data</Text>
           </TouchableOpacity>
 
           {user && (
-            <TouchableOpacity 
-              style={tw`py-3 px-4 bg-red-600 rounded-lg ${isDeletingAccount ? 'opacity-60' : ''}`} 
+            <TouchableOpacity
+              style={tw`py-3 px-4 bg-red-600 rounded-lg ${isDeletingAccount ? 'opacity-60' : ''}`}
               onPress={handleDeleteAccount}
               disabled={isDeletingAccount}
             >

@@ -31,10 +31,11 @@ export const CAMERA_CONFIG = {
 } as const;
 
 export const STORAGE_KEYS = {
-  OPENAI_API_KEY: '@popcam_openai_key',
-  ANALYSES: '@popcam_analyses',
-  USER_PREFERENCES: '@popcam_preferences',
-  CUSTOM_PROMPT_HISTORY: '@popcam_custom_prompt_history',
+  OPENAI_API_KEY: 'openai_api_key',
+  ANALYSES: 'analyses',
+  USER_PREFERENCES: 'user_preferences',
+  CUSTOM_PROMPT_HISTORY: 'custom_prompt_history',
+  LOCAL_PRESETS: 'local_presets',
 } as const;
 
 // Environment variables (you'll need to set these)
@@ -42,4 +43,8 @@ export const ENV = {
   OPENAI_API_KEY: process.env.EXPO_PUBLIC_OPENAI_API_KEY || '',
   NANO_BANANA_API_KEY: process.env.EXPO_PUBLIC_NANO_BANANA_API_KEY || '',
   NANO_BANANA_MODEL: process.env.EXPO_PUBLIC_NANO_BANANA_MODEL || '',
+  R2_ACCESS_KEY_ID: process.env.EXPO_PUBLIC_R2_ACCESS_KEY_ID || '',
+  R2_SECRET_ACCESS_KEY: process.env.EXPO_PUBLIC_R2_SECRET_ACCESS_KEY || '',
+  R2_BUCKET_NAME: process.env.EXPO_PUBLIC_R2_BUCKET_NAME || '',
+  R2_ACCOUNT_ID: process.env.EXPO_PUBLIC_R2_ACCOUNT_ID || '',
 } as const;
