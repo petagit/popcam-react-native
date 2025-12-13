@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { useUser } from '@clerk/clerk-expo';
 import { supabaseService } from '../services/supabaseService';
 
@@ -51,7 +52,7 @@ export const useCredits = (): UseCreditsReturn => {
       if (!email) {
         throw new Error('No email available for the current user.');
       }
-      
+
       // Ensure user exists in database
       await supabaseService.createOrUpdateUser(user.id, email);
 
@@ -94,9 +95,11 @@ export const useCredits = (): UseCreditsReturn => {
     return credits >= amount;
   }, [credits]);
 
-  useEffect(() => {
-    fetchCredits();
-  }, [fetchCredits]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchCredits();
+    }, [fetchCredits])
+  );
 
   return {
     credits,

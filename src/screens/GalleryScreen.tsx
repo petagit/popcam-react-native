@@ -20,6 +20,8 @@ import { storageService } from '../services/storageService';
 import CameraButton from '../components/CameraButton';
 import { MaterialIcons } from '@expo/vector-icons';
 import GlassButton from '../components/GlassButton';
+import BackButton from '../components/BackButton';
+import AppBackground from '../components/AppBackground';
 
 type GalleryScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Gallery'>;
 
@@ -45,11 +47,11 @@ const ITEM_WIDTH = (width - (NUM_COLUMNS + 1) * ITEM_MARGIN * 2) / NUM_COLUMNS;
 export default function GalleryScreen(): React.JSX.Element {
   const navigation = useNavigation<GalleryScreenNavigationProp>();
   const { user } = useUser();
-  
+
   const [listData, setListData] = useState<ListItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
-  
+
 
   useFocusEffect(
     useCallback(() => {
@@ -61,18 +63,18 @@ export default function GalleryScreen(): React.JSX.Element {
     const today = new Date();
     const yesterday = new Date();
     yesterday.setDate(today.getDate() - 1);
-    
+
     const analysisDate = new Date(date);
-    
+
     if (analysisDate.toDateString() === today.toDateString()) {
       return 'Today';
     } else if (analysisDate.toDateString() === yesterday.toDateString()) {
       return 'Yesterday';
     } else {
-      return analysisDate.toLocaleDateString('en-US', { 
-        weekday: 'long', 
-        month: 'long', 
-        day: 'numeric' 
+      return analysisDate.toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric'
       });
     }
   };
@@ -97,7 +99,7 @@ export default function GalleryScreen(): React.JSX.Element {
 
   const createFlatListData = (groupedAnalyses: GroupedAnalysis[]): ListItem[] => {
     const flatData: ListItem[] = [];
-    
+
     groupedAnalyses.forEach((group: GroupedAnalysis) => {
       // Add header
       flatData.push({
@@ -106,13 +108,13 @@ export default function GalleryScreen(): React.JSX.Element {
         title: group.title,
         count: group.data.length,
       });
-      
+
       // Create rows of items for this section
       const rows: ImageAnalysis[][] = [];
       for (let i = 0; i < group.data.length; i += NUM_COLUMNS) {
         rows.push(group.data.slice(i, i + NUM_COLUMNS));
       }
-      
+
       // Add rows as single items
       rows.forEach((row: ImageAnalysis[], rowIndex: number) => {
         flatData.push({
@@ -125,7 +127,7 @@ export default function GalleryScreen(): React.JSX.Element {
         });
       });
     });
-    
+
     return flatData;
   };
 
@@ -155,10 +157,11 @@ export default function GalleryScreen(): React.JSX.Element {
   };
 
   const handleAnalysisPress = (analysis: ImageAnalysis): void => {
-    navigation.navigate('Analysis', { 
+    navigation.navigate('Analysis', {
       imageUri: analysis.imageUri,
       infographicUri: analysis.infographicUri,
-      showInfographicFirst: analysis.hasInfographic && !!analysis.infographicUri
+      showInfographicFirst: analysis.hasInfographic && !!analysis.infographicUri,
+      analysisId: analysis.id,
     });
   };
 
@@ -185,7 +188,7 @@ export default function GalleryScreen(): React.JSX.Element {
     );
   };
 
-  
+
 
   const renderItem = ({ item, index }: { item: ListItem; index: number }) => {
     if (item.type === 'header') {
@@ -207,8 +210,8 @@ export default function GalleryScreen(): React.JSX.Element {
               key={analysis.id}
               style={[
                 tw`bg-white rounded-lg overflow-hidden shadow-sm`,
-                { 
-                  width: ITEM_WIDTH, 
+                {
+                  width: ITEM_WIDTH,
                   height: ITEM_WIDTH,
                   marginLeft: columnIndex === 0 ? ITEM_MARGIN : ITEM_MARGIN / 2,
                   marginRight: columnIndex === NUM_COLUMNS - 1 ? ITEM_MARGIN : ITEM_MARGIN / 2,
@@ -217,18 +220,18 @@ export default function GalleryScreen(): React.JSX.Element {
               onPress={() => handleAnalysisPress(analysis)}
               onLongPress={() => handleDeleteAnalysis(analysis)}
             >
-              <Image 
-                source={{ uri: analysis.hasInfographic && analysis.infographicUri ? analysis.infographicUri : analysis.imageUri }} 
+              <Image
+                source={{ uri: analysis.hasInfographic && analysis.infographicUri ? analysis.infographicUri : analysis.imageUri }}
                 style={tw`w-full h-full`}
                 resizeMode="cover"
               />
             </TouchableOpacity>
           ))}
           {/* Add empty spacers if row is not full */}
-          {item.row.length < NUM_COLUMNS && 
+          {item.row.length < NUM_COLUMNS &&
             Array.from({ length: NUM_COLUMNS - item.row.length }).map((_, emptyIndex) => (
-              <View 
-                key={`empty-${emptyIndex}`} 
+              <View
+                key={`empty-${emptyIndex}`}
                 style={[
                   { width: ITEM_WIDTH, height: ITEM_WIDTH },
                   {
@@ -266,41 +269,41 @@ export default function GalleryScreen(): React.JSX.Element {
     .reduce((count: number, item: ListItem) => count + (item.row?.length || 0), 0);
 
   return (
-    <SafeAreaView style={tw`flex-1 bg-gray-50`}>
-      <StatusBar style="dark" />
-      
-      {/* Header */}
-      <View style={tw`flex-row justify-between items-center px-5 py-4 bg-white border-b border-gray-200`}>
-        <GlassButton size={40} onPress={() => navigation.goBack()}>
-          <MaterialIcons name="arrow-back" size={20} color="#111827" />
-        </GlassButton>
-        
-        <Text style={tw`text-lg font-semibold text-gray-800`}>Gallery</Text>
-        
-        <CameraButton onPress={() => navigation.navigate('Camera')} />
-      </View>
+    <AppBackground>
+      <SafeAreaView style={tw`flex-1`}>
+        <StatusBar style="dark" />
 
-      {itemsCount === 0 && !isLoading ? (
-        renderEmptyState()
-      ) : (
-        <FlatList
-          data={listData}
-          renderItem={renderItem}
-          keyExtractor={(item: ListItem) => item.id}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={tw`pb-5`}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={['#3498db']}
-              tintColor="#3498db"
-            />
-          }
-        />
-      )}
+        {/* Header */}
+        <View style={tw`flex-row justify-between items-center px-5 py-4 border-b border-gray-200`}>
+          <BackButton />
 
-      
-    </SafeAreaView>
+          <Text style={tw`text-lg font-semibold text-gray-800`}>Gallery</Text>
+
+          <CameraButton onPress={() => navigation.navigate('Camera')} />
+        </View>
+
+        {itemsCount === 0 && !isLoading ? (
+          renderEmptyState()
+        ) : (
+          <FlatList
+            data={listData}
+            renderItem={renderItem}
+            keyExtractor={(item: ListItem) => item.id}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={tw`pb-5`}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={['#3498db']}
+                tintColor="#3498db"
+              />
+            }
+          />
+        )}
+
+
+      </SafeAreaView>
+    </AppBackground>
   );
 }

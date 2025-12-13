@@ -29,12 +29,14 @@ export interface AppState {
 
 export type RootStackParamList = {
   Splash: undefined;
+  IntroAnimation: undefined;
   Home: undefined;
   Camera: undefined;
   Analysis: {
     imageUri: string;
     infographicUri?: string;
     showInfographicFirst?: boolean;
+    analysisId?: string;
   };
   Gallery: undefined;
   Settings: undefined;

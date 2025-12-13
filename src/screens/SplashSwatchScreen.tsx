@@ -13,7 +13,7 @@ export default function SplashSwatchScreen(): React.JSX.Element {
 
   useEffect(() => {
     const t = setTimeout(() => {
-      navigation.replace('Landing');
+      navigation.replace('IntroAnimation');
     }, 850);
     return () => clearTimeout(t);
   }, [navigation]);
@@ -23,6 +23,7 @@ export default function SplashSwatchScreen(): React.JSX.Element {
       <StatusBar style="dark" backgroundColor="#F5E3CE" />
       <View style={[tw`absolute inset-0`, { backgroundColor: '#F5E3CE' }]} />
       <Text style={tw`text-4xl font-extrabold text-gray-900`}>POPCAM</Text>
+      <Text style={tw`text-base text-gray-700 mt-2`}>AI Photo for everyone.</Text>
     </View>
   );
 }

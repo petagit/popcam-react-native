@@ -27,12 +27,15 @@ import { imageUtils } from '../utils/imageUtils';
 import { MaterialIcons } from '@expo/vector-icons';
 import { storageService, LocalPreset } from '../services/storageService';
 import { useUser } from '@clerk/clerk-expo';
+import AppBackground from '../components/AppBackground';
 import { useCustomPrompts } from '../features/nano-banana/custom-prompts/useCustomPrompts';
 import { CustomPromptSection } from '../features/nano-banana/custom-prompts/CustomPromptSection';
 import { PromptHistoryModal } from '../features/nano-banana/custom-prompts/PromptHistoryModal';
 import { CustomPromptPickerModal } from '../features/nano-banana/custom-prompts/CustomPromptPickerModal';
 import { r2Service } from '../services/r2Service';
 import { NanoBananaGrid, GridItem } from '../features/nano-banana/NanoBananaGrid';
+import GlassButton from '../components/GlassButton';
+import BackButton from '../components/BackButton';
 
 type NanoBananaScreenNavigationProp = StackNavigationProp<RootStackParamList, 'NanoBanana'>;
 type NanoBananaScreenRouteProp = RouteProp<RootStackParamList, 'NanoBanana'>;
@@ -62,6 +65,7 @@ export default function NanoBananaScreen(): React.JSX.Element {
   const [isHistoryModalVisible, setIsHistoryModalVisible] = useState<boolean>(false);
   const [localPresets, setLocalPresets] = useState<LocalPreset[]>([]);
   const [isLoadingPresets, setIsLoadingPresets] = useState<boolean>(true);
+  const [isEditMode, setIsEditMode] = useState<boolean>(false);
 
   const loadLocalPresets = useCallback(async () => {
     setIsLoadingPresets(true);
@@ -181,12 +185,10 @@ export default function NanoBananaScreen(): React.JSX.Element {
   const isPickerMode = route.params?.mode === 'picker';
 
   const goToConfirm = useCallback(async (presetIdToUse: string, presetTitleToUse: string, customPromptToUse?: string): Promise<void> => {
-    // If custom prompt is enabled in the switch, use it.
-    // The simplified requirement says "when on, it will show a the custom field for user to enter in their prompt"
-    // We should pass this prompt effectively.
-    // However, the original logic had `customPromptToUse` passed in.
-    // We'll prioritize the state `customPrompt` if `isCustomPromptEnabled` is true.
-    const finalCustomPrompt = isCustomPromptEnabled ? customPrompt : customPromptToUse;
+    // Fix: Prioritize the passed `customPromptToUse` (from history item or "Use Prompt" button)
+    // over the current input state `customPrompt`.
+    // Only use the input state if no specific prompt was passed and the custom mode is enabled.
+    const finalCustomPrompt = customPromptToUse ?? (isCustomPromptEnabled ? customPrompt : undefined);
 
     // We used to override presetId to 'custom' if the switch was on, but that prevented selecting grid items.
     // Now we respect the passed presetIdToUse (which comes from the clicked tile).
@@ -379,244 +381,249 @@ export default function NanoBananaScreen(): React.JSX.Element {
   // We can't easily export/import type from the file we just created inside replace_file_content without separate step, but assuming we can import it.
 
   return (
-    <SafeAreaView style={tw`flex-1 bg-gray-50`}>
-      <StatusBar style="dark" />
+    <AppBackground>
+      <SafeAreaView style={tw`flex-1`}>
+        <StatusBar style="dark" />
 
-      <View style={tw`flex-row items-center justify-between px-5 py-4 bg-white border-b border-gray-200`}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={tw`py-2 px-3 flex-row items-center`}>
-          <MaterialIcons name="arrow-back" size={18} color="#3b82f6" />
-          <Text style={tw`text-base text-blue-500 font-semibold ml-1`}>Back</Text>
-        </TouchableOpacity>
-        <Text style={tw`text-lg font-semibold text-gray-800`}>Nano Banana Lab</Text>
-        <View style={tw`w-12`} />
-      </View>
-
-      <ScrollView style={tw`flex-1`} contentContainerStyle={tw`pb-28 px-4 pt-4`}>
-        <View style={tw`mb-4 bg-white rounded-2xl p-4 shadow-sm`}>
-          <View style={tw`flex-row justify-between items-center mb-2`}>
-            <Text style={tw`text-xl font-bold text-gray-900`}>Pick Your AI Filter</Text>
-            <TouchableOpacity style={tw`flex-row items-center`} onPress={() => navigation.navigate('PurchaseCredits')}>
-              <MaterialIcons name="bolt" size={16} color="#4b5563" style={tw`mr-1`} />
-              <Text style={tw`text-sm font-semibold text-gray-800`}>
-                {creditsLoading ? '...' : credits}
-              </Text>
-            </TouchableOpacity>
-          </View>
-          {referenceImageUri && (
-            <Text style={tw`mt-1 text-xs text-blue-600 font-semibold`}>
-              Photo loaded from the camera — choose a filter below.
-            </Text>
-          )}
-          {creditsError && (
-            <Text style={tw`text-xs text-red-500 mt-1`}>{creditsError}</Text>
-          )}
+        <View style={tw`flex-row items-center justify-between px-5 py-4 border-b border-gray-200`}>
+          <BackButton color="#3b82f6" />
+          <Text style={tw`text-lg font-semibold text-gray-800`}>Nano Banana Lab</Text>
+          <TouchableOpacity onPress={() => setIsEditMode(!isEditMode)} style={tw`py-2 px-3`}>
+            <Text style={tw`text-base text-blue-500 font-semibold`}>{isEditMode ? 'Done' : 'Edit'}</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Showcase Button */}
-        <TouchableOpacity
-          onPress={() => Linking.openURL('https://www.pop-cam.com/nanobanana/showcase')}
-          style={tw`mb-4 bg-purple-100 py-3 rounded-xl items-center border border-purple-200`}
-        >
-          <Text style={tw`text-purple-700 font-semibold text-base`}>✨ Visit Nano Banana Showcase</Text>
-        </TouchableOpacity>
-
-        <CustomPromptSection
-          isEnabled={isCustomPromptEnabled}
-          onToggle={setIsCustomPromptEnabled}
-          customPrompt={customPrompt}
-          onPromptChange={setCustomPrompt}
-          onSave={() => savePrompt(customPrompt)}
-          onViewHistory={() => setIsHistoryModalVisible(true)}
-          onUsePrompt={() => {
-            if (!customPrompt.trim()) return;
-            goToConfirm('custom', 'Custom Prompt', customPrompt.trim());
-          }}
-        />
-
-        {isLoadingPresets ? (
-          <View style={tw`flex-row flex-wrap`}>
-            {Array.from({ length: 9 }).map((_, idx) => (
-              <View
-                key={`skeleton-${idx}`}
-                style={[
-                  tw`mb-2 rounded-xl bg-gray-200 animate-pulse`,
-                  { width: tileSize, height: tileSize },
-                  { marginRight: (idx % columns) !== (columns - 1) ? interItemGap : 0 },
-                ]}
-              />
-            ))}
-          </View>
-        ) : (
-          <NanoBananaGrid
-            items={gridItems}
-            selectedId={selectedPresetId}
-            columns={columns}
-            tileSize={tileSize}
-            interItemGap={interItemGap}
-            onOpenCustomPicker={() => {
-              setEditingPresetId(null);
-              setCustomPrompt('');
-              openCustomPrompt();
-            }}
-            onSelect={(item) => {
-              if (item.type === 'preset') {
-                goToConfirm(item.preset.id, item.preset.title);
-              } else if (item.type === 'history_custom') {
-                goToConfirm(item.preset.id, item.preset.title || 'Custom Preset', item.preset.prompt_text);
-              }
-            }}
-            onLongPress={(item) => {
-              if (item.type === 'preset') {
-                openPreview(item.preset);
-              } else if (item.type === 'history_custom') {
-                handleCustomPresetLongPress(item.preset);
-              }
-            }}
-            onEditCustom={(preset) => handleEditCustomPreset(preset)}
-            onDeleteCustom={(preset) => handleCustomPresetDelete(preset)}
-          />
-        )}
-
-
-        {/* Only show reference image section if NOT in picker mode */}
-        {!isPickerMode && (
-          <View style={tw`mt-6 bg-white rounded-2xl p-4 shadow-sm`}>
-            <Text style={tw`text-base font-semibold text-gray-900 mb-2`}>Reference Image (Optional)</Text>
-            <Text style={tw`text-sm text-gray-600 mb-3`}>
-              Add a photo of yourself to guide the Nano Banana model. If you skip this step, the preset will rely solely on the prompt.
-            </Text>
-            <TouchableOpacity
-              onPress={handlePickReferenceImage}
-              style={tw`bg-blue-500 py-3 rounded-xl items-center`}
-            >
-              <Text style={tw`text-white text-base font-semibold`}>Upload Reference</Text>
-            </TouchableOpacity>
-
+        <ScrollView style={tw`flex-1`} contentContainerStyle={tw`pb-28 px-4 pt-4`}>
+          <View style={tw`mb-4 bg-white rounded-2xl p-4 shadow-sm`}>
+            <View style={tw`flex-row justify-between items-center mb-2`}>
+              <Text style={tw`text-xl font-bold text-gray-900`}>Pick Your AI Filter</Text>
+              <TouchableOpacity style={tw`flex-row items-center`} onPress={() => navigation.navigate('PurchaseCredits')}>
+                <MaterialIcons name="bolt" size={16} color="#4b5563" style={tw`mr-1`} />
+                <Text style={tw`text-sm font-semibold text-gray-800`}>
+                  {creditsLoading ? '...' : credits}
+                </Text>
+              </TouchableOpacity>
+            </View>
             {referenceImageUri && (
-              <View style={tw`mt-4`}>
-                <Text style={tw`text-sm text-gray-500 mb-2`}>Reference Preview</Text>
-                <Image
-                  source={{ uri: referenceImageUri }}
-                  style={[tw`rounded-xl`, { width: '100%', aspectRatio: 3 / 4 }]}
-                  resizeMode="cover"
-                />
-                <TouchableOpacity
-                  style={tw`mt-3 py-3 rounded-xl border border-blue-200 items-center`}
-                  onPress={() => navigation.navigate('Camera')}
-                >
-                  <Text style={tw`text-blue-500 font-semibold`}>Retake Photo</Text>
-                </TouchableOpacity>
-              </View>
+              <Text style={tw`mt-1 text-xs text-blue-600 font-semibold`}>
+                Photo loaded from the camera — choose a filter below.
+              </Text>
+            )}
+            {creditsError && (
+              <Text style={tw`text-xs text-red-500 mt-1`}>{creditsError}</Text>
             )}
           </View>
-        )}
 
-        {/* Preview modal */}
-        <Modal visible={isPreviewVisible} transparent animationType="fade" onRequestClose={closePreview}>
-          <Pressable onPress={closePreview} style={[tw`flex-1 items-center justify-center`, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
-            <Pressable onPress={() => { }} style={[tw`rounded-2xl bg-white p-4`, { width: previewWidth, maxWidth: screenWidth - 48, maxHeight: Math.floor(screenHeight * 0.8), overflow: 'hidden' }]}>
-              {previewPreset && (
-                <>
+          {/* Showcase Button */}
+          <TouchableOpacity
+            onPress={() => Linking.openURL('https://www.pop-cam.com/nanobanana/showcase')}
+            style={tw`mb-4 bg-purple-100 py-3 rounded-xl items-center border border-purple-200`}
+          >
+            <Text style={tw`text-purple-700 font-semibold text-base`}>✨ Visit Nano Banana Showcase</Text>
+          </TouchableOpacity>
+
+          <CustomPromptSection
+            isEnabled={isCustomPromptEnabled}
+            onToggle={setIsCustomPromptEnabled}
+            customPrompt={customPrompt}
+            onPromptChange={setCustomPrompt}
+            onSave={async () => {
+              const result = await savePrompt(customPrompt);
+              return !!result;
+            }}
+            onViewHistory={() => setIsHistoryModalVisible(true)}
+            onUsePrompt={() => {
+              if (!customPrompt.trim()) return;
+              goToConfirm('custom', 'Custom Prompt', customPrompt.trim());
+            }}
+          />
+
+          {isLoadingPresets ? (
+            <View style={tw`flex-row flex-wrap`}>
+              {Array.from({ length: 9 }).map((_, idx) => (
+                <View
+                  key={`skeleton-${idx}`}
+                  style={[
+                    tw`mb-2 rounded-xl bg-gray-200 animate-pulse`,
+                    { width: tileSize, height: tileSize },
+                    { marginRight: (idx % columns) !== (columns - 1) ? interItemGap : 0 },
+                  ]}
+                />
+              ))}
+            </View>
+          ) : (
+            <NanoBananaGrid
+              items={gridItems}
+              selectedId={selectedPresetId}
+              columns={columns}
+              tileSize={tileSize}
+              interItemGap={interItemGap}
+              isManageMode={isEditMode}
+              onOpenCustomPicker={() => {
+                setEditingPresetId(null);
+                setCustomPrompt('');
+                openCustomPrompt();
+              }}
+              onSelect={(item) => {
+                if (item.type === 'preset') {
+                  goToConfirm(item.preset.id, item.preset.title);
+                } else if (item.type === 'history_custom') {
+                  goToConfirm(item.preset.id, item.preset.title || 'Custom Preset', item.preset.prompt_text);
+                }
+              }}
+              onLongPress={(item) => {
+                if (item.type === 'preset') {
+                  openPreview(item.preset);
+                } else if (item.type === 'history_custom') {
+                  handleCustomPresetLongPress(item.preset);
+                }
+              }}
+              onEditCustom={(preset) => handleEditCustomPreset(preset)}
+              onDeleteCustom={(preset) => handleCustomPresetDelete(preset)}
+            />
+          )}
+
+
+          {/* Only show reference image section if NOT in picker mode */}
+          {!isPickerMode && (
+            <View style={tw`mt-6 bg-white rounded-2xl p-4 shadow-sm`}>
+              <Text style={tw`text-base font-semibold text-gray-900 mb-2`}>Reference Image (Optional)</Text>
+              <Text style={tw`text-sm text-gray-600 mb-3`}>
+                Add a photo of yourself to guide the Nano Banana model. If you skip this step, the preset will rely solely on the prompt.
+              </Text>
+              <TouchableOpacity
+                onPress={handlePickReferenceImage}
+                style={tw`bg-blue-500 py-3 rounded-xl items-center`}
+              >
+                <Text style={tw`text-white text-base font-semibold`}>Upload Reference</Text>
+              </TouchableOpacity>
+
+              {referenceImageUri && (
+                <View style={tw`mt-4`}>
+                  <Text style={tw`text-sm text-gray-500 mb-2`}>Reference Preview</Text>
                   <Image
-                    source={previewPreset.preview}
-                    style={[tw`rounded-xl mb-3`, { width: '100%', aspectRatio: 1 }]}
+                    source={{ uri: referenceImageUri }}
+                    style={[tw`rounded-xl`, { width: '100%', aspectRatio: 3 / 4 }]}
                     resizeMode="cover"
                   />
-                  <Text style={tw`text-base font-semibold text-gray-900 mb-1`}>{previewPreset.title}</Text>
-                  <Text numberOfLines={3} style={tw`text-sm text-gray-700`}>{previewPreset.description}</Text>
-                </>
+                  <TouchableOpacity
+                    style={tw`mt-3 py-3 rounded-xl border border-blue-200 items-center`}
+                    onPress={() => navigation.navigate('Camera')}
+                  >
+                    <Text style={tw`text-blue-500 font-semibold`}>Retake Photo</Text>
+                  </TouchableOpacity>
+                </View>
               )}
-              <View style={tw`flex-row justify-end mt-4`}>
-                <TouchableOpacity onPress={sharePreview} style={tw`py-2 px-3 rounded-xl bg-blue-600 mr-2`}>
-                  <Text style={tw`text-white font-semibold`}>Share</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={closePreview} style={tw`py-2 px-3 rounded-xl bg-blue-500`}>
-                  <Text style={tw`text-white font-semibold`}>Close</Text>
-                </TouchableOpacity>
-              </View>
+            </View>
+          )}
+
+          {/* Preview modal */}
+          <Modal visible={isPreviewVisible} transparent animationType="fade" onRequestClose={closePreview}>
+            <Pressable onPress={closePreview} style={[tw`flex-1 items-center justify-center`, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+              <Pressable onPress={() => { }} style={[tw`rounded-2xl bg-white p-4`, { width: previewWidth, maxWidth: screenWidth - 48, maxHeight: Math.floor(screenHeight * 0.8), overflow: 'hidden' }]}>
+                {previewPreset && (
+                  <>
+                    <Image
+                      source={previewPreset.preview}
+                      style={[tw`rounded-xl mb-3`, { width: '100%', aspectRatio: 1 }]}
+                      resizeMode="cover"
+                    />
+                    <Text style={tw`text-base font-semibold text-gray-900 mb-1`}>{previewPreset.title}</Text>
+                    <Text numberOfLines={3} style={tw`text-sm text-gray-700`}>{previewPreset.description}</Text>
+                  </>
+                )}
+                <View style={tw`flex-row justify-end mt-4`}>
+                  <TouchableOpacity onPress={sharePreview} style={tw`py-2 px-3 rounded-xl bg-blue-600 mr-2`}>
+                    <Text style={tw`text-white font-semibold`}>Share</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={closePreview} style={tw`py-2 px-3 rounded-xl bg-blue-500`}>
+                    <Text style={tw`text-white font-semibold`}>Close</Text>
+                  </TouchableOpacity>
+                </View>
+              </Pressable>
             </Pressable>
-          </Pressable>
-        </Modal>
+          </Modal>
 
-        {/* Custom prompt modal */}
-        <CustomPromptPickerModal
-          visible={isPromptModalVisible}
-          onClose={() => {
-            setIsPromptModalVisible(false);
-            setEditingPresetId(null);
-          }}
-          customPrompt={customPrompt}
-          setCustomPrompt={setCustomPrompt}
-          history={promptHistory}
-          onSaveAndUse={async (imageUri) => {
-            setIsPromptModalVisible(false);
-            try {
-              let r2Url: string | undefined = undefined;
-
-              if (imageUri && user?.id) {
-                // Upload to R2
-                // We show basic loading or just await?
-                // Ideally specific UI for uploading, but we'll await here (UI might freeze briefly, user usually expects this)
-                const uploadedKey = await r2Service.uploadImage(imageUri, user.id);
-                if (uploadedKey) {
-                  // Construct URL if helper doesn't return full URL
-                  // Our r2Service now returns full URL if configured or key.
-                  // Let's assume r2Service returns something usable or just the key.
-                  // Using updated r2Service assumption (it returns full URL if domain set, or key). 
-                  // See previous read of r2Service.ts. 
-                  // It returns `fileName` (key) if EXPO_PUBLIC_R2_PUBLIC_DOMAIN is missing. 
-                  // To be safe we should store the key or url. 
-                  // Assuming the user WILL set the public domain or we use a cloudflare worker url.
-                  // For now, save the result.
-                  r2Url = uploadedKey;
-                }
-              }
-
-              if (editingPresetId) {
-                // Update existing
-                // Note: updatePrompt currently only takes text/title in my types. I should check that.
-                // I updated storageService but useCustomPrompts `updatePrompt` signature might be stricter?
-                // useCustomPrompts implementation:
-                // const updatePrompt = async (id: string, updates: { prompt_text?: string; title?: string })
-                // I should have added thumbnail_url support there too. 
-                // Let's do a quick fix-up if needed or just pass it if type allows (it might complain).
-                // I will update useCustomPrompts right after this if I missed it.
-                await updatePrompt(editingPresetId, {
-                  prompt_text: customPrompt.trim(),
-                  title: 'Custom Preset',
-                  thumbnail_url: r2Url,
-                });
-                goToConfirm(editingPresetId, 'Custom Preset', customPrompt.trim());
-              } else {
-                // Create new
-                // savePrompt now returns string | null (the new ID)
-                const newId = await savePrompt(customPrompt.trim(), 'Custom Preset', r2Url);
-
-                // Use the new ID if available, otherwise fallback to 'custom' (which won't update thumbnail, but better than crash)
-                const idToUse = (typeof newId === 'string' && newId) ? newId : 'custom';
-                goToConfirm(idToUse, 'Custom Preset', customPrompt.trim());
-              }
-
+          {/* Custom prompt modal */}
+          <CustomPromptPickerModal
+            visible={isPromptModalVisible}
+            onClose={() => {
+              setIsPromptModalVisible(false);
               setEditingPresetId(null);
-            } catch (err) {
-              console.error(err);
-              goToConfirm('custom', 'Custom Prompt', customPrompt.trim());
-            }
-          }}
-        />
+            }}
+            customPrompt={customPrompt}
+            setCustomPrompt={setCustomPrompt}
+            history={promptHistory}
+            onSaveAndUse={async (imageUri) => {
+              setIsPromptModalVisible(false);
+              try {
+                let r2Url: string | undefined = undefined;
 
-        {/* History Modal */}
-        <PromptHistoryModal
-          visible={isHistoryModalVisible}
-          onClose={() => setIsHistoryModalVisible(false)}
-          history={promptHistory}
-          onSelect={(item) => {
-            setCustomPrompt(item);
-            setIsHistoryModalVisible(false);
-          }}
-          onDelete={deletePrompt}
-        />
-      </ScrollView>
-    </SafeAreaView>
+                if (imageUri && user?.id) {
+                  // Upload to R2
+                  // We show basic loading or just await?
+                  // Ideally specific UI for uploading, but we'll await here (UI might freeze briefly, user usually expects this)
+                  const uploadedKey = await r2Service.uploadImage(imageUri, user.id);
+                  if (uploadedKey) {
+                    // Construct URL if helper doesn't return full URL
+                    // Our r2Service now returns full URL if configured or key.
+                    // Let's assume r2Service returns something usable or just the key.
+                    // Using updated r2Service assumption (it returns full URL if domain set, or key). 
+                    // See previous read of r2Service.ts. 
+                    // It returns `fileName` (key) if EXPO_PUBLIC_R2_PUBLIC_DOMAIN is missing. 
+                    // To be safe we should store the key or url. 
+                    // Assuming the user WILL set the public domain or we use a cloudflare worker url.
+                    // For now, save the result.
+                    r2Url = uploadedKey;
+                  }
+                }
+
+                if (editingPresetId) {
+                  // Update existing
+                  // Note: updatePrompt currently only takes text/title in my types. I should check that.
+                  // I updated storageService but useCustomPrompts `updatePrompt` signature might be stricter?
+                  // useCustomPrompts implementation:
+                  // const updatePrompt = async (id: string, updates: { prompt_text?: string; title?: string })
+                  // I should have added thumbnail_url support there too. 
+                  // Let's do a quick fix-up if needed or just pass it if type allows (it might complain).
+                  // I will update useCustomPrompts right after this if I missed it.
+                  await updatePrompt(editingPresetId, {
+                    prompt_text: customPrompt.trim(),
+                    title: 'Custom Preset',
+                    thumbnail_url: r2Url,
+                  });
+                  goToConfirm(editingPresetId, 'Custom Preset', customPrompt.trim());
+                } else {
+                  // Create new
+                  // savePrompt now returns string | null (the new ID)
+                  const newId = await savePrompt(customPrompt.trim(), 'Custom Preset', r2Url);
+
+                  // Use the new ID if available, otherwise fallback to 'custom' (which won't update thumbnail, but better than crash)
+                  const idToUse = (typeof newId === 'string' && newId) ? newId : 'custom';
+                  goToConfirm(idToUse, 'Custom Preset', customPrompt.trim());
+                }
+
+                setEditingPresetId(null);
+              } catch (err) {
+                console.error(err);
+                goToConfirm('custom', 'Custom Prompt', customPrompt.trim());
+              }
+            }}
+          />
+
+          {/* History Modal */}
+          <PromptHistoryModal
+            visible={isHistoryModalVisible}
+            onClose={() => setIsHistoryModalVisible(false)}
+            history={promptHistory}
+            onSelect={(item) => {
+              setCustomPrompt(item);
+              setIsHistoryModalVisible(false);
+            }}
+            onDelete={deletePrompt}
+          />
+        </ScrollView>
+      </SafeAreaView>
+    </AppBackground>
   );
 }

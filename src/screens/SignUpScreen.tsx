@@ -21,6 +21,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import GlassButton from '../components/GlassButton';
 import { MaterialIcons } from '@expo/vector-icons';
+import AppBackground from '../components/AppBackground';
 
 type SignUpScreenNavigationProp = StackNavigationProp<RootStackParamList, 'SignUp'>;
 
@@ -128,13 +129,8 @@ export default function SignUpScreen(): React.JSX.Element {
 
   if (pendingVerification) {
     return (
-      <SafeAreaView style={tw`flex-1`}>
-        <LinearGradient
-          colors={['#F5E3CE', '#FFFFFF', '#FFFFFF']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          style={tw`flex-1`}
-        >
+      <AppBackground>
+        <SafeAreaView style={tw`flex-1`}>
           <StatusBar style="dark" />
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -185,19 +181,14 @@ export default function SignUpScreen(): React.JSX.Element {
               </View>
             </View>
           </KeyboardAvoidingView>
-        </LinearGradient>
-      </SafeAreaView>
+        </SafeAreaView>
+      </AppBackground>
     );
   }
 
   return (
-    <SafeAreaView style={tw`flex-1`}>
-      <LinearGradient
-        colors={['#F5E3CE', '#FFFFFF', '#FFFFFF']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={tw`flex-1`}
-      >
+    <AppBackground>
+      <SafeAreaView style={tw`flex-1`}>
         <StatusBar style="dark" />
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -295,15 +286,18 @@ export default function SignUpScreen(): React.JSX.Element {
               </View>
             </View>
 
-            <View style={tw`flex-row justify-center items-center`}>
-              <Text style={tw`text-base text-gray-600`}>Already have an account? </Text>
-              <TouchableOpacity onPress={handleSignInPress}>
-                <Text style={tw`text-base text-blue-500 font-semibold`}>Sign In</Text>
-              </TouchableOpacity>
-            </View>
+
           </View>
-        </KeyboardAvoidingView>
-      </LinearGradient>
-    </SafeAreaView>
+
+          <View style={tw`flex-row justify-center items-center`}>
+            <Text style={tw`text-base text-gray-600`}>Already have an account? </Text>
+            <TouchableOpacity onPress={handleSignInPress}>
+              <Text style={tw`text-base text-blue-500 font-semibold`}>Sign In</Text>
+            </TouchableOpacity>
+          </View>
+
+        </KeyboardAvoidingView >
+      </SafeAreaView >
+    </AppBackground >
   );
-} 
+}

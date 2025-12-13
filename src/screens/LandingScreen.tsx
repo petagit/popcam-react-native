@@ -19,6 +19,7 @@ import tw from 'twrnc';
 import { RootStackParamList } from '../types';
 import { LinearGradient } from 'expo-linear-gradient';
 import { AntDesign, MaterialIcons } from '@expo/vector-icons';
+import AppBackground from '../components/AppBackground';
 
 type LandingScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Landing'>;
 
@@ -120,13 +121,8 @@ export default function LandingScreen(): React.JSX.Element {
   };
 
   return (
-    <SafeAreaView style={tw`flex-1`}>
-      <LinearGradient
-        colors={['#FFFFFF', '#FFFFFF']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={tw`flex-1`}
-      >
+    <AppBackground>
+      <SafeAreaView style={tw`flex-1`}>
         <StatusBar style="dark" backgroundColor="#fff" />
 
         <ScrollView style={tw`flex-1`} contentContainerStyle={tw`pb-10`} showsVerticalScrollIndicator={false}>
@@ -134,9 +130,7 @@ export default function LandingScreen(): React.JSX.Element {
           <View style={tw`pt-8 items-center px-6`}>
             <Text style={tw`text-5xl font-extrabold text-gray-900`}>POPCAM</Text>
             <View style={tw`mt-3`}>
-              <Text style={tw`text-base text-gray-700 text-center`}>make a fun photo with AI</Text>
-              <Text style={tw`text-base text-gray-700 text-center`}>share seamlessly</Text>
-              <Text style={tw`text-base text-gray-700 text-center`}>loaded with the latest nanobanana</Text>
+              <Text style={tw`text-base text-gray-700 text-center`}>Start your journey for Free - No Ads</Text>
             </View>
           </View>
 
@@ -224,7 +218,8 @@ export default function LandingScreen(): React.JSX.Element {
             </View>
           </View>
         </ScrollView>
-      </LinearGradient>
-    </SafeAreaView>
+      </SafeAreaView>
+    </AppBackground>
   );
 }
+

@@ -6,6 +6,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Camera, CameraView } from 'expo-camera';
@@ -42,6 +43,10 @@ export default function CameraScreen(): React.JSX.Element {
   const [currentPresetTitle, setCurrentPresetTitle] = useState<string>('Nano Banana');
   const [currentPresetId, setCurrentPresetId] = useState<string>('nano-banana-v1');
   const [currentCustomPromptText, setCurrentCustomPromptText] = useState<string | undefined>(undefined);
+  const [zoom, setZoom] = useState<number>(0);
+
+  const { width } = useWindowDimensions();
+  const camHeight = width * (4 / 3);
 
   useEffect(() => {
     requestPermissions();
@@ -408,11 +413,36 @@ export default function CameraScreen(): React.JSX.Element {
     <View style={tw`flex-1 bg-black`}>
       <StatusBar style="light" />
 
-      <CameraView
-        ref={cameraRef}
-        style={tw`flex-1 absolute top-0 left-0 right-0 bottom-0`}
-        facing={cameraType}
-      />
+      <View style={{ height: camHeight, width: width, overflow: 'hidden' }}>
+        <CameraView
+          ref={cameraRef}
+          style={tw`flex-1`}
+          facing={cameraType}
+          zoom={zoom}
+        />
+
+        {/* Zoom Controls */}
+        <View style={tw`absolute bottom-4 left-0 right-0 flex-row justify-center items-center gap-4`}>
+          {[0, 0.1, 0.2].map((z, index) => {
+            const label = index === 0 ? '1x' : index === 1 ? '2x' : '3x';
+            const isSelected = zoom === z;
+            return (
+              <TouchableOpacity
+                key={label}
+                onPress={() => setZoom(z)}
+                style={[
+                  tw`w-8 h-8 rounded-full items-center justify-center bg-black/50`,
+                  isSelected && tw`bg-yellow-500`
+                ]}
+              >
+                <Text style={[tw`text-xs font-bold`, isSelected ? tw`text-black` : tw`text-white`]}>
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
 
       <View style={tw`absolute top-12 left-0 right-0 px-4 flex-row justify-between items-center z-10`}>
         <GlassButton size={44} onPress={() => navigation.navigate('Home')}>

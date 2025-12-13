@@ -22,15 +22,15 @@ export interface InAppProduct {
 
 class StoreKitService {
   private productIds: string[] = [
-    'com.popcam.credits.24',
-    'com.popcam.credits.48',
-    'com.popcam.credits.96',
+    'com.popcam.app.credits24',
+    'com.popcam.app.credits48',
+    'com.popcam.app.credits96',
   ];
 
   private creditMapping: Record<string, number> = {
-    'com.popcam.credits.24': 24,
-    'com.popcam.credits.48': 48,
-    'com.popcam.credits.96': 96,
+    'com.popcam.app.credits24': 24,
+    'com.popcam.app.credits48': 48,
+    'com.popcam.app.credits96': 96,
   };
 
   /**
@@ -54,6 +54,7 @@ class StoreKitService {
   async getProducts(): Promise<InAppProduct[]> {
     try {
       const products: Product[] = (await fetchProducts({ skus: this.productIds })) as Product[];
+      console.log('Fetched products from store:', JSON.stringify(products, null, 2));
 
       return products.map((product: any) => ({
         productId: product.productId,
@@ -82,8 +83,15 @@ class StoreKitService {
       console.log(`Initiating purchase for product: ${productId}`);
 
       const purchase = await requestPurchase({
-        sku: productId,
-        andDangerouslyFinishTransactionAutomaticallyIOS: false,
+        request: {
+          ios: {
+            sku: productId,
+            andDangerouslyFinishTransactionAutomaticallyIOS: false,
+          },
+          android: {
+            skus: [productId],
+          },
+        },
       } as any) as unknown as Purchase;
 
       return purchase;

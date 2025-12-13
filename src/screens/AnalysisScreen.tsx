@@ -14,11 +14,14 @@ import {
 
   Platform,
   Linking,
+  FlatList,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useUser } from '@clerk/clerk-expo';
+import GlassButton from '../components/GlassButton';
+import BackButton from '../components/BackButton';
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system/legacy';
 import tw from 'twrnc';
@@ -26,6 +29,7 @@ import { RootStackParamList, ImageAnalysis } from '../types';
 import { storageService } from '../services/storageService';
 import { MaterialIcons, FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
 import CameraButton from '../components/CameraButton';
+import AppBackground from '../components/AppBackground';
 
 type AnalysisScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Analysis'>;
 type AnalysisScreenRouteProp = RouteProp<RootStackParamList, 'Analysis'>;
@@ -36,37 +40,87 @@ export default function AnalysisScreen(): React.JSX.Element {
   const navigation = useNavigation<AnalysisScreenNavigationProp>();
   const route = useRoute<AnalysisScreenRouteProp>();
   const { user } = useUser();
-  const { imageUri, infographicUri, showInfographicFirst = false } = route.params;
+  const { imageUri, infographicUri, showInfographicFirst = false, analysisId } = route.params;
 
-  const [analysis, setAnalysis] = useState<ImageAnalysis | null>(null);
+  const [analyses, setAnalyses] = useState<ImageAnalysis[]>([]);
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
+  // Derived current analysis
+  const analysis = analyses[currentIndex] ?? null;
+
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [showingInfographic, setShowingInfographic] = useState<boolean>(showInfographicFirst);
   const [drawerVisible, setDrawerVisible] = useState<boolean>(false);
   const [shareVisible, setShareVisible] = useState<boolean>(false);
+  const flatListRef = React.useRef<any>(null);
 
   useEffect(() => {
-    loadAnalysis();
-  }, [imageUri, user]);
+    loadAnalyses();
+  }, [user]); // We load all analyses once
 
-  const loadAnalysis = async (): Promise<void> => {
+  // Reset showing infographic preference when sliding to a new image? 
+  // User might prefer sticky setting, but initial requirement was showInfographicFirst param.
+  // We'll reset it to "true" (Show AI) by default when changing, or keep it sticky?
+  // Let's keep it simple: defaulting to true (AI version) for consistency with gallery view usually showing result.
+  useEffect(() => {
+    if (analysis?.hasInfographic) {
+      setShowingInfographic(true);
+    } else {
+      setShowingInfographic(false);
+    }
+  }, [currentIndex, analysis?.id]);
+
+
+  const loadAnalyses = async (): Promise<void> => {
     try {
-      const analyses: ImageAnalysis[] = await storageService.getAnalyses(user?.id);
-      const currentAnalysis = analyses.find((item: ImageAnalysis) => item.imageUri === imageUri);
+      setIsLoading(true);
+      const savedAnalyses: ImageAnalysis[] = await storageService.getAnalyses(user?.id);
 
-      if (currentAnalysis) {
-        setAnalysis(currentAnalysis);
-      } else {
-        Alert.alert('Error', 'Photo not found');
-        navigation.goBack();
+      // Filter logic same as Gallery (or lenient? Gallery filters for infographicAnalyses for list, but maybe we want all?)
+      // The GalleryScreen filters: `const infographicAnalyses ... = savedAnalyses.filter(...)`
+      // We should probably match that so we only swipe through what was in the gallery.
+      const validAnalyses: ImageAnalysis[] = savedAnalyses.filter(
+        (item: ImageAnalysis) => item.hasInfographic && item.infographicUri
+      ).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+      setAnalyses(validAnalyses);
+
+      // Find initial index
+      let initialIndex = -1;
+      if (analysisId) {
+        initialIndex = validAnalyses.findIndex(a => a.id === analysisId);
       }
+
+      if (initialIndex === -1 && imageUri) {
+        // Fallback
+        initialIndex = validAnalyses.findIndex(a => a.imageUri === imageUri);
+      }
+
+      if (initialIndex !== -1) {
+        setCurrentIndex(initialIndex);
+      } else {
+        // If not found in the filtered list (unlikely if came from gallery), maybe just show first or alert
+        if (validAnalyses.length === 0) {
+          Alert.alert('Error', 'Photo not found');
+          navigation.goBack();
+          return;
+        }
+        setCurrentIndex(0);
+      }
+
     } catch (error) {
-      console.error('Error loading photo:', error);
-      Alert.alert('Error', 'Failed to load photo');
+      console.error('Error loading photos:', error);
+      Alert.alert('Error', 'Failed to load photos');
       navigation.goBack();
     } finally {
       setIsLoading(false);
     }
   };
+
+  const onViewableItemsChanged = React.useRef(({ viewableItems }: any) => {
+    if (viewableItems.length > 0) {
+      setCurrentIndex(viewableItems[0].index ?? 0);
+    }
+  }).current;
 
   const openShareSheet = (): void => {
     setShareVisible(true);
@@ -101,12 +155,14 @@ export default function AnalysisScreen(): React.JSX.Element {
 
       const openOrFallback = async (url: string | undefined): Promise<void> => {
         if (!url) {
+          const shareContent: any = Platform.select({
+            ios: { url: uri },
+            android: { url: uri, message: text },
+            default: { url: uri },
+          });
+
           await Share.share(
-            Platform.select({
-              ios: { url: uri },
-              android: { url: uri, message: text },
-              default: { url: uri },
-            }) as { url?: string; message?: string },
+            shareContent,
             {
               dialogTitle: 'Share',
               subject: 'PopCam',
@@ -119,21 +175,23 @@ export default function AnalysisScreen(): React.JSX.Element {
           if (canOpen) {
             await Linking.openURL(url);
           } else {
-            await Share.share(
-              Platform.select({
-                ios: { url: uri },
-                android: { url: uri, message: text },
-                default: { url: uri },
-              }) as { url?: string; message?: string }
-            );
-          }
-        } catch {
-          await Share.share(
-            Platform.select({
+            const shareContent: any = Platform.select({
               ios: { url: uri },
               android: { url: uri, message: text },
               default: { url: uri },
-            }) as { url?: string; message?: string }
+            });
+            await Share.share(
+              shareContent
+            );
+          }
+        } catch {
+          const shareContent: any = Platform.select({
+            ios: { url: uri },
+            android: { url: uri, message: text },
+            default: { url: uri },
+          });
+          await Share.share(
+            shareContent
           );
         }
       };
@@ -176,12 +234,13 @@ export default function AnalysisScreen(): React.JSX.Element {
           break;
         case 'system':
         default:
+          const shareContent: any = Platform.select({
+            ios: { url: uri },
+            default: { url: uri, message: text },
+          });
+
           await Share.share(
-            Platform.select({
-              ios: { url: uri },
-              android: { url: uri, message: text },
-              default: { url: uri },
-            }) as { url?: string; message?: string },
+            shareContent,
             {
               dialogTitle: 'Share',
               subject: 'PopCam',
@@ -211,7 +270,18 @@ export default function AnalysisScreen(): React.JSX.Element {
           onPress: async () => {
             try {
               await storageService.deleteAnalysis(analysis.id, user?.id);
-              navigation.goBack();
+
+              // Remove from local list
+              const newAnalyses = analyses.filter(a => a.id !== analysis.id);
+              if (newAnalyses.length === 0) {
+                navigation.goBack();
+              } else {
+                setAnalyses(newAnalyses);
+                // Adjust index if needed
+                if (currentIndex >= newAnalyses.length) {
+                  setCurrentIndex(newAnalyses.length - 1);
+                }
+              }
             } catch (error) {
               console.error('Error deleting photo:', error);
               Alert.alert('Error', 'Failed to delete photo');
@@ -310,8 +380,6 @@ export default function AnalysisScreen(): React.JSX.Element {
   };
 
   const handleImagePress = (): void => {
-
-
     if (analysis?.hasInfographic && analysis.infographicUri) {
       setShowingInfographic(!showingInfographic);
     }
@@ -321,7 +389,7 @@ export default function AnalysisScreen(): React.JSX.Element {
     if (showingInfographic && analysis?.infographicUri) {
       return analysis.infographicUri;
     }
-    return analysis?.imageUri || imageUri;
+    return analysis?.imageUri || imageUri || '';
   };
 
   const getImageTypeLabel = (): string => {
@@ -346,10 +414,44 @@ export default function AnalysisScreen(): React.JSX.Element {
     };
   };
 
+  const getItemLayout = (data: any, index: number) => ({
+    length: width,
+    offset: width * index,
+    index,
+  });
+
+  const renderItem = ({ item }: { item: ImageAnalysis }) => {
+    // Determine URI for this item based on state. 
+    // Wait, `showingInfographic` is global state for the screen.
+    // That's fine, toggle applies to currently visible image. 
+    // BUT, `renderItem` needs to decide which URI to show for *this* item.
+    // If `showingInfographic` is true, show AI version of item (if available).
+    const uriToShow = (showingInfographic && item.hasInfographic && item.infographicUri)
+      ? item.infographicUri
+      : item.imageUri;
+
+    return (
+      <View style={{ width, height: '100%' }}>
+        <TouchableOpacity
+          onPress={handleImagePress}
+          style={tw`w-full h-full`}
+          disabled={!item.hasInfographic}
+          activeOpacity={1}
+        >
+          <Image
+            source={{ uri: uriToShow }}
+            style={tw`w-full h-full`}
+            resizeMode="contain"
+          />
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   if (isLoading) {
     return (
       <View style={tw`flex-1 justify-center items-center bg-white`}>
-        <Text style={tw`text-base text-gray-600`}>Loading photo...</Text>
+        <Text style={tw`text-base text-gray-600`}>Loading photos...</Text>
       </View>
     );
   }
@@ -357,7 +459,7 @@ export default function AnalysisScreen(): React.JSX.Element {
   if (!analysis) {
     return (
       <View style={tw`flex-1 justify-center items-center bg-white px-5`}>
-        <Text style={tw`text-lg text-red-500 mb-5 text-center`}>Photo not found</Text>
+        <Text style={tw`text-lg text-red-500 mb-5 text-center`}>No photos found.</Text>
         <TouchableOpacity style={tw`bg-blue-500 px-6 py-3 rounded-lg`} onPress={() => navigation.goBack()}>
           <Text style={tw`text-white text-base font-semibold`}>Go Back</Text>
         </TouchableOpacity>
@@ -366,33 +468,30 @@ export default function AnalysisScreen(): React.JSX.Element {
   }
 
   return (
-    <View style={tw`flex-1 bg-white`}>
+    <AppBackground>
       <StatusBar style="dark" />
 
-      {/* Full Screen Image */}
+      {/* Full Screen Image List */}
       <View style={tw`flex-1 relative`}>
-        <TouchableOpacity
-          onPress={handleImagePress}
-          style={tw`w-full h-full`}
-          disabled={!analysis?.hasInfographic}
-        >
-          <Image
-            source={{ uri: getCurrentImageUri() }}
-            style={tw`w-full h-full`}
-            resizeMode="contain"
-          />
-        </TouchableOpacity>
+
+        <FlatList
+          ref={flatListRef}
+          data={analyses}
+          renderItem={renderItem}
+          keyExtractor={(item: ImageAnalysis) => item.id}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          initialScrollIndex={currentIndex}
+          getItemLayout={getItemLayout}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
+        />
 
         {/* Overlay Header Buttons */}
-        <SafeAreaView style={tw`absolute top-0 left-0 right-0`}>
+        <SafeAreaView style={tw`absolute top-0 left-0 right-0`} pointerEvents="box-none">
           <View style={tw`flex-row justify-between items-center px-5 py-4`}>
-            <TouchableOpacity
-              style={tw`bg-black bg-opacity-60 rounded-full px-4 py-2 flex-row items-center`}
-              onPress={() => navigation.goBack()}
-            >
-              <MaterialIcons name="arrow-back" size={18} color="#ffffff" />
-              <Text style={tw`text-base text-white font-semibold ml-1`}>Back</Text>
-            </TouchableOpacity>
+            <BackButton color="#ffffff" style={tw`bg-black/40`} />
 
             <CameraButton
               onPress={() => navigation.navigate('Camera')}
@@ -404,7 +503,10 @@ export default function AnalysisScreen(): React.JSX.Element {
 
         {/* Image Type Indicator */}
         {analysis?.hasInfographic && (
-          <View style={tw`absolute bottom-20 left-4 bg-black bg-opacity-70 px-3 py-2 rounded-lg`}>
+          <View
+            style={tw`absolute bottom-20 left-4 bg-black bg-opacity-70 px-3 py-2 rounded-lg`}
+            pointerEvents="none"
+          >
             <Text style={tw`text-white text-sm font-medium`}>{getImageTypeLabel()}</Text>
             <Text style={tw`text-gray-300 text-xs mt-1`}>Tap to toggle</Text>
           </View>
@@ -514,7 +616,7 @@ export default function AnalysisScreen(): React.JSX.Element {
                 <Text style={tw`text-xs text-gray-700 mt-1`}>WhatsApp</Text>
               </TouchableOpacity>
               <TouchableOpacity style={tw`items-center w-[22%] mb-5`} onPress={() => shareTo('telegram')}>
-                <MaterialCommunityIcons name="telegram" size={26} color="#27A7E7" />
+                <FontAwesome name="telegram" size={26} color="#27A7E7" />
                 <Text style={tw`text-xs text-gray-700 mt-1`}>Telegram</Text>
               </TouchableOpacity>
               <TouchableOpacity style={tw`items-center w-[22%] mb-5`} onPress={() => shareTo('messenger')}>
@@ -541,6 +643,6 @@ export default function AnalysisScreen(): React.JSX.Element {
           </View>
         </Pressable>
       </Modal>
-    </View>
+    </AppBackground>
   );
 }

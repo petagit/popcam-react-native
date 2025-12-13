@@ -26,6 +26,8 @@ import { supabaseService } from '../services/supabaseService';
 import { useCredits } from '../hooks/useCredits';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import GlassButton from '../components/GlassButton';
+import BackButton from '../components/BackButton';
+import AppBackground from '../components/AppBackground';
 
 type PurchaseCreditsScreenNavigationProp = StackNavigationProp<RootStackParamList, 'PurchaseCredits'>;
 
@@ -41,8 +43,8 @@ interface ProductDisplayInfo {
 }
 
 const PRODUCT_DISPLAY_INFO: Record<string, ProductDisplayInfo> = {
-  'com.popcam.credits.24': {
-    id: 'com.popcam.credits.24',
+  'com.popcam.app.credits24': {
+    id: 'com.popcam.app.credits24',
     name: '24 Credits',
     subhead: 'Generate 24 infographics',
     priceDisplay: '$6.00',
@@ -53,8 +55,8 @@ const PRODUCT_DISPLAY_INFO: Record<string, ProductDisplayInfo> = {
       'Download generated images'
     ]
   },
-  'com.popcam.credits.48': {
-    id: 'com.popcam.credits.48',
+  'com.popcam.app.credits48': {
+    id: 'com.popcam.app.credits48',
     name: '48 Credits',
     subhead: 'Exclusive access to new model + 24/7 customer support',
     priceDisplay: '$10.00',
@@ -67,8 +69,8 @@ const PRODUCT_DISPLAY_INFO: Record<string, ProductDisplayInfo> = {
     ],
     mostPopular: true
   },
-  'com.popcam.credits.96': {
-    id: 'com.popcam.credits.96',
+  'com.popcam.app.credits96': {
+    id: 'com.popcam.app.credits96',
     name: '96 Credits',
     subhead: 'Exclusive access to new model + 24/7 customer support',
     priceDisplay: '$20.00',
@@ -297,55 +299,55 @@ export default function PurchaseCreditsScreen(): React.JSX.Element {
   };
 
   return (
-    <SafeAreaView style={tw`flex-1 bg-orange-50`}>
-      <StatusBar style="dark" />
+    <AppBackground>
+      <SafeAreaView style={tw`flex-1`}>
+        <StatusBar style="dark" />
 
-      {/* Header */}
-      <View style={tw`px-5 py-4`}>
-        <GlassButton size={40} onPress={() => navigation.goBack()}>
-          <MaterialIcons name="arrow-back" size={20} color="#111827" />
-        </GlassButton>
-      </View>
-
-      <ScrollView style={tw`flex-1 px-5`} showsVerticalScrollIndicator={false}>
-        <View style={tw`items-center mb-8 mt-2`}>
-          <Text style={tw`text-3xl font-bold text-gray-900 mb-3`}>Purchase Credits</Text>
-          <Text style={tw`text-center text-gray-600 leading-5`}>
-            Add more credits to your account and create more stunning infographics.
-            Each credit allows you to generate one infographic.
-          </Text>
+        {/* Header */}
+        <View style={tw`px-5 py-4`}>
+          <BackButton />
         </View>
 
-        {/* Use the defined order */}
-        {renderProductCard(PRODUCT_DISPLAY_INFO['com.popcam.credits.24'])}
-        {renderProductCard(PRODUCT_DISPLAY_INFO['com.popcam.credits.48'])}
-        {renderProductCard(PRODUCT_DISPLAY_INFO['com.popcam.credits.96'])}
+        <ScrollView style={tw`flex-1 px-5`} showsVerticalScrollIndicator={false}>
+          <View style={tw`items-center mb-8 mt-2`}>
+            <Text style={tw`text-3xl font-bold text-gray-900 mb-3`}>Purchase Credits</Text>
+            <Text style={tw`text-center text-gray-600 leading-5`}>
+              Add more credits to your account and create more stunning infographics.
+              Each credit allows you to generate one infographic.
+            </Text>
+          </View>
 
-        <View style={tw`items-center mt-4 mb-8`}>
-          <TouchableOpacity
-            onPress={async () => {
-              try {
-                Alert.alert('Restoring', 'Checking for previous purchases...');
-                await handlePendingPurchases();
-                Alert.alert('Restore Complete', 'We checked for any missing purchases.');
-              } catch (e) {
-                Alert.alert('Error', 'Failed to restore purchases. Please try again.');
-              }
-            }}
-            style={tw`py-3 px-6`}
-          >
-            <Text style={tw`text-blue-500 font-semibold text-base`}>Restore Purchases</Text>
-          </TouchableOpacity>
-        </View>
+          {/* Use the defined order */}
+          {renderProductCard(PRODUCT_DISPLAY_INFO['com.popcam.app.credits24'])}
+          {renderProductCard(PRODUCT_DISPLAY_INFO['com.popcam.app.credits48'])}
+          {renderProductCard(PRODUCT_DISPLAY_INFO['com.popcam.app.credits96'])}
 
-        <View style={tw`h-10`} />
+          <View style={tw`items-center mt-4 mb-8`}>
+            <TouchableOpacity
+              onPress={async () => {
+                try {
+                  Alert.alert('Restoring', 'Checking for previous purchases...');
+                  await handlePendingPurchases();
+                  Alert.alert('Restore Complete', 'We checked for any missing purchases.');
+                } catch (e) {
+                  Alert.alert('Error', 'Failed to restore purchases. Please try again.');
+                }
+              }}
+              style={tw`py-3 px-6`}
+            >
+              <Text style={tw`text-blue-500 font-semibold text-base`}>Restore Purchases</Text>
+            </TouchableOpacity>
+          </View>
 
-        {/* Debug/Info for development if no products loaded */}
-        {products.length === 0 && isLoading && (
-          <Text style={tw`text-center text-gray-400 text-xs mb-10`}>Connecting to App Store...</Text>
-        )}
-      </ScrollView>
-    </SafeAreaView>
+          <View style={tw`h-10`} />
+
+          {/* Debug/Info for development if no products loaded */}
+          {products.length === 0 && isLoading && (
+            <Text style={tw`text-center text-gray-400 text-xs mb-10`}>Connecting to App Store...</Text>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    </AppBackground>
   );
 }
 

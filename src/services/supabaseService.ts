@@ -3,19 +3,34 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 const supabaseUrl: string = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const supabaseKey: string = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Missing Supabase configuration. Please set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in your environment.');
-}
+// We no longer throw here to avoid crashing the app on startup.
+// Instead, we handle the missing configuration within the service methods or by checking isConfigured().
+// if (!supabaseUrl || !supabaseKey) {
+//   throw new Error('Missing Supabase configuration...');
+// }
 
 class SupabaseService {
-  private supabase: SupabaseClient;
+  private supabase: SupabaseClient | null = null;
 
   constructor() {
-    this.supabase = createClient(supabaseUrl, supabaseKey);
+    if (supabaseUrl && supabaseKey) {
+      this.supabase = createClient(supabaseUrl, supabaseKey);
+    } else {
+      console.warn('[SupabaseService] Missing configuration. Service will not function correctly.');
+    }
+  }
+
+  isConfigured(): boolean {
+    return !!this.supabase;
   }
 
   async getUserCredits(userId: string, email?: string): Promise<number> {
     try {
+      if (!this.supabase) {
+        console.warn('[SupabaseService] Service not configured');
+        return 0; // Return 0 credits if not configured
+      }
+
       console.log('[SupabaseService] getUserCredits called for:', userId);
       const defaultCredits = 5;
       const { data, error } = await this.supabase
@@ -61,6 +76,8 @@ class SupabaseService {
 
       const newCredits: number = currentCredits - amount;
 
+      if (!this.supabase) throw new Error('Supabase not configured');
+
       const { data, error } = await this.supabase
         .from('users')
         .update({
@@ -86,6 +103,8 @@ class SupabaseService {
 
   async createOrUpdateUser(userId: string, email: string, initialCredits: number = 5): Promise<void> {
     try {
+      if (!this.supabase) throw new Error('Supabase not configured');
+
       const { data: existingUser, error: fetchError } = await this.supabase
         .from('users')
         .select('id, email')
@@ -139,6 +158,8 @@ class SupabaseService {
       const currentCredits: number = await this.getUserCredits(userId, email);
       const newCredits: number = currentCredits + amount;
 
+      if (!this.supabase) throw new Error('Supabase not configured');
+
       const { data, error } = await this.supabase
         .from('users')
         .update({
@@ -163,6 +184,8 @@ class SupabaseService {
 
   async deleteUserAccount(userId: string): Promise<void> {
     try {
+      if (!this.supabase) throw new Error('Supabase not configured');
+
       const { error } = await this.supabase
         .from('users')
         .delete()
@@ -180,6 +203,8 @@ class SupabaseService {
 
   async getCustomPrompts(userId: string): Promise<{ id: string; prompt_text: string; title?: string; thumbnail_url?: string }[]> {
     try {
+      if (!this.supabase) return [];
+
       console.log('[SupabaseService] getCustomPrompts called for:', userId);
       const { data, error } = await this.supabase
         .from('custom_prompts')
@@ -208,6 +233,8 @@ class SupabaseService {
 
   async deleteCustomPrompt(id: string, userId: string): Promise<boolean> {
     try {
+      if (!this.supabase) return false;
+
       const { error } = await this.supabase
         .from('custom_prompts')
         .delete()
@@ -227,6 +254,8 @@ class SupabaseService {
 
   async saveCustomPrompt(userId: string, prompt: string, title?: string, thumbnailUrl?: string): Promise<string | null> {
     try {
+      if (!this.supabase) throw new Error('Supabase not configured');
+
       const { data, error } = await this.supabase
         .from('custom_prompts')
         .insert({
@@ -252,6 +281,8 @@ class SupabaseService {
 
   async updateCustomPrompt(id: string, userId: string, updates: { prompt_text?: string; title?: string; thumbnail_url?: string }): Promise<boolean> {
     try {
+      if (!this.supabase) return false;
+
       const { error } = await this.supabase
         .from('custom_prompts')
         .update(updates)
@@ -271,6 +302,8 @@ class SupabaseService {
 
   async saveGeneratedImage(userId: string, imageUrl: string, prompt?: string): Promise<void> {
     try {
+      if (!this.supabase) throw new Error('Supabase not configured');
+
       const { error } = await this.supabase
         .from('generated_images')
         .insert({
@@ -292,6 +325,11 @@ class SupabaseService {
 
   async checkConnection(): Promise<boolean> {
     try {
+      if (!this.supabase) {
+        console.warn('Supabase not configured, connection check failed');
+        return false;
+      }
+
       console.log('Checking Supabase connection...');
       const { data, error, count } = await this.supabase
         .from('users')

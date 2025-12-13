@@ -13,7 +13,7 @@ import { supabaseService } from './src/services/supabaseService';
 import { ENV } from './src/constants/config';
 
 // Screens
-import HomeScreen from './src/screens/HomeScreen';
+import UserScreen from './src/screens/UserScreen';
 import CameraScreen from './src/screens/CameraScreen';
 import AnalysisScreen from './src/screens/AnalysisScreen';
 import GalleryScreen from './src/screens/GalleryScreen';
@@ -22,6 +22,7 @@ import SignInScreen from './src/screens/SignInScreen';
 import SignUpScreen from './src/screens/SignUpScreen';
 import LandingScreen from './src/screens/LandingScreen';
 import SplashSwatchScreen from './src/screens/SplashSwatchScreen';
+import IntroAnimationScreen from './src/screens/IntroAnimationScreen';
 import NanoBananaScreen from './src/screens/NanoBananaScreen';
 import NanoBananaResultScreen from './src/screens/NanoBananaResultScreen';
 
@@ -122,7 +123,7 @@ function AuthenticatedApp(): React.JSX.Element {
       >
         <Stack.Screen
           name="Home"
-          component={HomeScreen}
+          component={UserScreen}
           options={{
             title: 'PopCam',
           }}
@@ -202,6 +203,13 @@ function UnauthenticatedApp(): React.JSX.Element {
           }}
         />
         <Stack.Screen
+          name="IntroAnimation"
+          component={IntroAnimationScreen}
+          options={{
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
           name="Landing"
           component={LandingScreen}
           options={{
@@ -236,10 +244,29 @@ function UnauthenticatedApp(): React.JSX.Element {
   );
 }
 
+// Fallback component when Supabase is not configured
+function SupabaseNotConfigured(): React.JSX.Element {
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+      <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 10 }}>
+        Supabase Not Configured
+      </Text>
+      <Text style={{ textAlign: 'center', color: '#666' }}>
+        Please set up your EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in your environment configuration.
+      </Text>
+    </View>
+  );
+}
+
 export default function App(): React.JSX.Element {
   // Check if Clerk is properly configured
   if (!publishableKey || publishableKey === 'pk_test_your_key_here') {
     return <ClerkNotConfigured />;
+  }
+
+  // Check if Supabase is properly configured
+  if (!supabaseService.isConfigured()) {
+    return <SupabaseNotConfigured />;
   }
 
   return (

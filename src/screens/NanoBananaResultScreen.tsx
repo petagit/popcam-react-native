@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import tw from 'twrnc';
 import { RootStackParamList, ImageAnalysis } from '../types';
 import { useUser } from '@clerk/clerk-expo';
+import AppBackground from '../components/AppBackground';
+import BackButton from '../components/BackButton';
 import { NANO_BANANA_PRESETS, NanoBananaPreset } from '../lib/nanobanana-presets';
 import { useCredits } from '../hooks/useCredits';
 import { imageUtils } from '../utils/imageUtils';
@@ -25,6 +27,8 @@ import { nanoBananaService } from '../services/nanoBananaService';
 import { storageService } from '../services/storageService';
 import { r2Service } from '../services/r2Service';
 import { supabaseService } from '../services/supabaseService';
+import { Toast } from '../components/Toast';
+import { captureRef } from 'react-native-view-shot';
 
 
 type NanoBananaResultNavigationProp = StackNavigationProp<RootStackParamList, 'NanoBananaResult'>;
@@ -41,6 +45,12 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(!!autoGenerate);
   const [progress, setProgress] = useState<number>(0);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
+
+  const hasStartedGeneration = useRef<boolean>(false);
+  const hasAutoSaved = useRef<boolean>(false);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -73,6 +83,69 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
     () => NANO_BANANA_PRESETS.find((preset) => preset.id === presetId),
     [presetId]
   );
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToastMessage(message);
+    setToastType(type);
+    setToastVisible(true);
+  };
+
+  const watermarkRef = useRef<View>(null);
+
+  const saveImagesToLibrary = async (genUri: string, refUri?: string, isAutoSave: boolean = false): Promise<boolean> => {
+    try {
+      setIsSaving(true);
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+
+      if (status !== 'granted') {
+        if (!isAutoSave) {
+          Alert.alert('Permission Needed', 'Media library permission is required to save images.');
+        } else {
+          console.log('[NanoBanana] Auto-save failed: Permission not granted');
+        }
+        return false;
+      }
+
+      // Capture watermark view
+      let uriToSave = genUri;
+      if (watermarkRef.current) {
+        try {
+          // Wait a bit for image to render if needed, but usually OK
+          uriToSave = await captureRef(watermarkRef, {
+            format: 'jpg',
+            quality: 0.9,
+          });
+          console.log('[NanoBanana] Captured watermarked image:', uriToSave);
+        } catch (captureError) {
+          console.error('Failed to capture watermark, falling back to original:', captureError);
+        }
+      }
+
+      // Save processed image (watermarked)
+      const asset = await MediaLibrary.createAssetAsync(uriToSave);
+      await MediaLibrary.createAlbumAsync('PopCam Nano Banana', asset, false);
+
+      // Save original image if present and different
+      if (refUri && refUri !== genUri) {
+        try {
+          const originalAsset = await MediaLibrary.createAssetAsync(refUri);
+          await MediaLibrary.createAlbumAsync('PopCam Nano Banana', originalAsset, false);
+        } catch (e) {
+          console.warn('Failed to save original image:', e);
+        }
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error saving Nano Banana image:', error);
+      if (!isAutoSave) {
+        showToast('Unable to save images', 'error');
+      }
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const generateImage = useCallback(async () => {
     try {
@@ -178,7 +251,24 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
         const isStandard = NANO_BANANA_PRESETS.some(p => p.id === presetId);
         if (!isStandard) {
           // Update with cloud URL if available, else local
-          const thumbUrl = finalCloudUrl || localResultUri;
+          let thumbUrl = finalCloudUrl;
+
+          // If we don't have a cloud URL yet (e.g. cloud storage pref is off),
+          // we should force upload for the thumbnail so it persists across re-installs.
+          if (!thumbUrl && user?.id) {
+            try {
+              console.log('[NanoBanana] Uploading thumbnail for custom prompt persistence...');
+              // We reuse the same R2 service. This does not save to 'generated_images' table (history),
+              // just uploads the file so we can link it in 'custom_prompts'.
+              thumbUrl = await r2Service.uploadImage(localResultUri, user.id) || undefined;
+            } catch (e) {
+              console.warn('[NanoBanana] Failed to force upload thumbnail:', e);
+            }
+          }
+
+          // Fallback to local if upload failed or no user
+          thumbUrl = thumbUrl || localResultUri;
+
           await storageService.updateCustomPromptInHistory(
             presetId,
             { thumbnail_url: thumbUrl },
@@ -190,6 +280,24 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
       await storageService.saveAnalysis(analysis, user?.id);
 
       setResultUri(localResultUri);
+
+      // Wait for next render cycle to allow image to be ready for capture logic if mostly ready
+      // But we will call saveImagesToLibrary which will capture ref
+      // We need to ensure the image is displayed in the hidden view.
+      // Since resultUri is updated, the hidden view should update.
+      // We might need a small delay or effect, but let's try calling it.
+      // Actually, setting state is async. We should trigger save in an effect or use a timeout.
+
+      // Auto-save to gallery - Call logic in useEffect when resultUri changes if autoGenerate is true?
+      // No, we already have logic for auto-save. But we need to make sure the view is rendered.
+      // Let's rely on a small timeout to let the view render.
+      setTimeout(async () => {
+        const saved = await saveImagesToLibrary(localResultUri, referenceImageUri || undefined, true);
+        if (saved) {
+          showToast('Images saved to gallery Automatically!', 'success');
+        }
+      }, 500);
+
     } catch (error) {
       console.error('[NanoBanana] Generation failed with error:', error);
       Alert.alert('Generation Failed', 'Could not generate image. You can try again or go back.', [
@@ -215,7 +323,9 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
   useEffect(() => {
     // Wait for credits to load before attempting auto-generation
     // using resultUri check to ensure we don't regenerate if already done
-    if (autoGenerate && !resultUri && !creditsLoading) {
+    // Use ref to prevent duplicate generation when dependencies (like credits/generateImage) change
+    if (autoGenerate && !resultUri && !creditsLoading && !hasStartedGeneration.current) {
+      hasStartedGeneration.current = true;
       generateImage();
     }
   }, [autoGenerate, resultUri, creditsLoading, generateImage]);
@@ -246,204 +356,223 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
   const handleShare = useCallback(async () => {
     if (!resultUri) return;
     try {
+      // First capture with watermark
+      let uriToShare = resultUri;
+      if (watermarkRef.current) {
+        try {
+          uriToShare = await captureRef(watermarkRef, { format: 'jpg', quality: 0.9 });
+        } catch (e) {
+          console.error('Share capture failed', e);
+        }
+      }
+
       await Share.share({
-        url: resultUri,
+        url: uriToShare,
         message: 'Check out this Nano Banana creation!'
       });
     } catch (error) {
       console.error('Error sharing Nano Banana image:', error);
-      Alert.alert('Share Error', 'Unable to share the image at the moment.');
+      showToast('Unable to share image', 'error');
     }
   }, [resultUri]);
 
   const handleSaveToCameraRoll = useCallback(async () => {
     if (!resultUri) return;
-    try {
-      setIsSaving(true);
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-
-      if (status !== 'granted') {
-        Alert.alert('Permission Needed', 'Media library permission is required to save images.');
-        return;
-      }
-
-      // Save processed image
-      const asset = await MediaLibrary.createAssetAsync(resultUri);
-      await MediaLibrary.createAlbumAsync('PopCam Nano Banana', asset, false);
-
-      // Save original image if present and different
-      if (referenceImageUri && referenceImageUri !== resultUri) {
-        try {
-          const originalAsset = await MediaLibrary.createAssetAsync(referenceImageUri);
-          await MediaLibrary.createAlbumAsync('PopCam Nano Banana', originalAsset, false);
-        } catch (e) {
-          console.warn('Failed to save original image:', e);
-          // Don't fail the whole operation if just original fails, identifying it might be remote or temp
-        }
-      }
-
-      Alert.alert('Saved', 'Images saved to your photo library.');
-    } catch (error) {
-      console.error('Error saving Nano Banana image:', error);
-      Alert.alert('Save Error', 'Unable to save the image to your photo library.');
-    } finally {
-      setIsSaving(false);
+    const saved = await saveImagesToLibrary(resultUri, referenceImageUri || undefined, false);
+    if (saved) {
+      showToast('Images saved to gallery!', 'success');
     }
   }, [resultUri, referenceImageUri]);
 
   const handleMakeAnother = useCallback(() => {
-    if (presetId || referenceImageUri) {
-      navigation.navigate('NanoBanana', {
-        presetId: presetId ?? undefined,
-        referenceImageUri: referenceImageUri ?? undefined,
-      });
-    } else {
-      navigation.goBack();
-    }
-  }, [navigation, presetId, referenceImageUri]);
+    // Navigate back to Camera to take a new picture.
+    // The Camera screen will automatically pick up the last used preset from user preferences.
+    navigation.navigate('Camera');
+  }, [navigation]);
 
   return (
-    <SafeAreaView style={tw`flex-1 bg-gray-50`}>
-      <StatusBar style="dark" />
+    <AppBackground>
+      <SafeAreaView style={tw`flex-1`}>
+        <StatusBar style="dark" />
 
-      {/* Header */}
-      <View style={tw`flex-row items-center justify-between px-5 py-4 bg-white border-b border-gray-200`}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={tw`py-2 px-3 flex-row items-center`}>
-          <MaterialIcons name="arrow-back" size={18} color="#3b82f6" />
-          <Text style={tw`text-base text-blue-500 font-semibold ml-1`}>Back</Text>
-        </TouchableOpacity>
-        <Text style={tw`text-lg font-semibold text-gray-800`} numberOfLines={1}>
-          Result Screen
-        </Text>
-        <TouchableOpacity
-          onPress={() => {
-            Alert.alert(
-              'Report Issue',
-              'If this image is offensive or inappropriate, please report it. We will review it within 24 hours.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Report',
-                  style: 'destructive',
-                  onPress: () => Alert.alert('Report Sent', 'Thank you for your feedback. We will review this image.')
-                }
-              ]
-            );
-          }}
-          style={tw`py-2 px-3`}
-        >
-          <MaterialIcons name="flag" size={20} color="#ef4444" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Main Content Area - Full Screen Image Container */}
-      <View style={tw`flex-1 relative bg-black w-full overflow-hidden`}>
-        <Pressable onPress={handleToggleImage} style={tw`flex-1 justify-center items-center w-full h-full`}>
-
-          {/* Loading Overlay */}
-          {isGenerating && (
-            <View style={[tw`absolute z-20 top-0 left-0 right-0 bottom-0 justify-center items-center`, { backgroundColor: 'rgba(0,0,0,0.7)' }]}>
-              <View style={tw`w-4/5 items-center`}>
-                <Text style={tw`text-white text-lg font-bold mb-4`}>Creating Masterpiece...</Text>
-
-                {/* Progress Bar Container */}
-                <View style={tw`w-full h-2 bg-gray-700 rounded-full overflow-hidden mb-2`}>
-                  {/* Simulated Progress Fill */}
-                  <View
-                    style={[
-                      tw`h-full bg-blue-500 rounded-full`,
-                      { width: `${progress}%` }
-                    ]}
-                  />
-                </View>
-
-                <Text style={tw`text-blue-300 text-sm font-semibold`}>{progress}%</Text>
-              </View>
-            </View>
-          )}
-
-          {imageToDisplay ? (
-            <Image
-              source={{ uri: imageToDisplay }}
-              style={tw`w-full h-full`}
-              resizeMode="contain"
-            />
-          ) : (
-            // Placeholder if nothing to display (shouldn't happen)
-            <View style={tw`flex-1 bg-gray-900 w-full`} />
-          )}
-
-          {!isGenerating && (
-            <>
-              <View
-                style={[
-                  tw`absolute top-4 left-4 px-3 py-1 rounded-full`,
-                  { backgroundColor: 'rgba(0,0,0,0.6)' },
-                ]}
-              >
-                <Text style={tw`text-white text-xs font-semibold uppercase`}>
-                  {showAfter || !referenceImageUri ? 'After' : 'Before'}
-                </Text>
-              </View>
-              {referenceImageUri && (
-                <View style={tw`absolute bottom-4 left-0 right-0 items-center`}>
-                  <Text
-                    style={[
-                      tw`text-white text-center text-xs py-2 px-4 rounded-full`,
-                      { backgroundColor: 'rgba(0,0,0,0.5)' },
-                    ]}
-                  >
-                    Tap to toggle
-                  </Text>
-                </View>
-              )}
-            </>
-          )}
-        </Pressable>
-      </View>
-
-      {/* Footer Controls */}
-      <View style={tw`bg-white px-5 py-4 pb-8 border-t border-gray-200`}>
-        {/* Custom Prompt Display (Compact) */}
-        {(presetId === 'custom' || customPrompt) && (
-          <View style={tw`mb-4`}>
-            <Text numberOfLines={1} style={tw`text-xs text-gray-500 text-center`}>
-              Used: <Text style={tw`italic text-gray-800`}>{customPrompt || selectedPreset?.prompt}</Text>
-            </Text>
-          </View>
-        )}
-
-        <View style={tw`flex-row justify-between mb-3`}>
+        {/* Header */}
+        <View style={tw`flex-row items-center justify-between px-5 py-4 bg-[#F5F5DC] border-b border-gray-200`}>
+          <BackButton color="#3b82f6" />
+          <Text style={tw`text-lg font-semibold text-gray-800`} numberOfLines={1}>
+            Result Screen
+          </Text>
           <TouchableOpacity
-            style={[tw`flex-1 py-3 rounded-xl mr-2 items-center`, isGenerating ? tw`bg-gray-300` : tw`bg-blue-500`]}
-            onPress={handleShare}
-            disabled={isGenerating || !resultUri}
+            onPress={() => {
+              Alert.alert(
+                'Report Issue',
+                'If this image is offensive or inappropriate, please report it. We will review it within 24 hours.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Report',
+                    style: 'destructive',
+                    onPress: () => Alert.alert('Report Sent', 'Thank you for your feedback. We will review this image.')
+                  }
+                ]
+              );
+            }}
+            style={tw`py-2 px-3`}
           >
-            <Text style={tw`text-white font-semibold`}>Share</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={tw`flex-1 bg-green-500 py-3 rounded-xl ml-2 items-center`}
-            onPress={handleSaveToCameraRoll}
-            disabled={isSaving}
-          >
-            {isSaving ? (
-              <View style={tw`flex-row items-center`}>
-                <ActivityIndicator color="#fff" size="small" style={tw`mr-2`} />
-                <Text style={tw`text-white font-semibold`}>Saving…</Text>
-              </View>
-            ) : (
-              <Text style={tw`text-white font-semibold`}>Save</Text>
-            )}
+            <MaterialIcons name="flag" size={20} color="#ef4444" />
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity
-          style={tw`py-3 rounded-xl border border-blue-200 bg-white items-center`}
-          onPress={handleMakeAnother}
+        {/* Main Content Area - Full Screen Image Container */}
+        <View style={tw`flex-1 relative bg-black w-full overflow-hidden`}>
+          <Pressable onPress={handleToggleImage} style={tw`flex-1 justify-center items-center w-full h-full`}>
+
+            {/* Loading Overlay */}
+            {isGenerating && (
+              <View style={[tw`absolute z-20 top-0 left-0 right-0 bottom-0 justify-center items-center`, { backgroundColor: 'rgba(0,0,0,0.7)' }]}>
+                <View style={tw`w-4/5 items-center`}>
+                  <Image
+                    source={require('../../assets/loading-animation.gif')}
+                    style={tw`w-16 h-16 mb-4`}
+                    resizeMode="contain"
+                  />
+                  <Text style={tw`text-white text-lg font-bold mb-4`}>Creating Masterpiece...</Text>
+
+                  {/* Progress Bar Container */}
+                  <View style={tw`w-full h-2 bg-gray-700 rounded-full overflow-hidden mb-2`}>
+                    {/* Simulated Progress Fill */}
+                    <View
+                      style={[
+                        tw`h-full bg-blue-500 rounded-full`,
+                        { width: `${progress}%` }
+                      ]}
+                    />
+                  </View>
+
+                  <Text style={tw`text-blue-300 text-sm font-semibold`}>{progress}%</Text>
+                </View>
+              </View>
+            )}
+
+            {imageToDisplay ? (
+              <Image
+                source={{ uri: imageToDisplay }}
+                style={tw`w-full h-full`}
+                resizeMode="contain"
+              />
+            ) : (
+              // Placeholder if nothing to display (shouldn't happen)
+              <View style={tw`flex-1 bg-gray-900 w-full`} />
+            )}
+
+            {!isGenerating && (
+              <>
+                <View
+                  style={[
+                    tw`absolute top-4 left-4 px-3 py-1 rounded-full`,
+                    { backgroundColor: 'rgba(0,0,0,0.6)' },
+                  ]}
+                >
+                  <Text style={tw`text-white text-xs font-semibold uppercase`}>
+                    {showAfter || !referenceImageUri ? 'After' : 'Before'}
+                  </Text>
+                </View>
+                {referenceImageUri && (
+                  <View style={tw`absolute bottom-4 left-0 right-0 items-center`}>
+                    <Text
+                      style={[
+                        tw`text-white text-center text-xs py-2 px-4 rounded-full`,
+                        { backgroundColor: 'rgba(0,0,0,0.5)' },
+                      ]}
+                    >
+                      Tap to toggle
+                    </Text>
+                  </View>
+                )}
+              </>
+            )}
+          </Pressable>
+        </View>
+
+        {/* Off-screen View for Watermark Capture */}
+        <View
+          ref={watermarkRef}
+          collapsable={false}
+          style={{
+            position: 'absolute',
+            top: -9999,
+            left: -9999,
+            width: 1024, // Assuming standard generation size, or get from layout
+            height: 1024,
+          }}
         >
-          <Text style={tw`text-blue-500 font-semibold`}>Make Another</Text>
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
+          {/* Only render if we have a result uri to capture */}
+          {resultUri && (
+            <View style={{ width: 1024, height: 1024, position: 'relative' }}>
+              <Image source={{ uri: resultUri }} style={{ width: '100%', height: '100%' }} />
+              <View style={{
+                position: 'absolute',
+                bottom: 20,
+                right: 20,
+                backgroundColor: 'rgba(0,0,0,0.5)',
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 8
+              }}>
+                <Text style={{ color: 'white', fontSize: 24, fontWeight: 'bold' }}>Generated by PopCam</Text>
+              </View>
+            </View>
+          )}
+        </View>
+
+        {/* Footer Controls */}
+        <View style={tw`bg-[#F5F5DC] px-5 py-4 pb-8 border-t border-gray-200`}>
+          {/* Custom Prompt Display (Compact) */}
+          {(presetId === 'custom' || customPrompt) && (
+            <View style={tw`mb-4`}>
+              <Text numberOfLines={1} style={tw`text-xs text-gray-500 text-center`}>
+                Used: <Text style={tw`italic text-gray-800`}>{customPrompt || selectedPreset?.prompt}</Text>
+              </Text>
+            </View>
+          )}
+
+          <View style={tw`flex-row justify-between mb-3`}>
+            <TouchableOpacity
+              style={[tw`flex-1 py-3 rounded-xl mr-2 items-center`, isGenerating ? tw`bg-gray-300` : tw`bg-blue-500`]}
+              onPress={handleShare}
+              disabled={isGenerating || !resultUri}
+            >
+              <Text style={tw`text-white font-semibold`}>Share</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={tw`flex-1 bg-green-500 py-3 rounded-xl ml-2 items-center`}
+              onPress={handleSaveToCameraRoll}
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <View style={tw`flex-row items-center`}>
+                  <ActivityIndicator color="#fff" size="small" style={tw`mr-2`} />
+                  <Text style={tw`text-white font-semibold`}>Saving…</Text>
+                </View>
+              ) : (
+                <Text style={tw`text-white font-semibold`}>Save</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            style={tw`py-3 rounded-xl border border-blue-200 bg-[#F5F5DC] items-center`}
+            onPress={handleMakeAnother}
+          >
+            <Text style={tw`text-blue-500 font-semibold`}>Make Another</Text>
+          </TouchableOpacity>
+        </View>
+        <Toast
+          visible={toastVisible}
+          message={toastMessage}
+          type={toastType}
+          onDismiss={() => setToastVisible(false)}
+        />
+      </SafeAreaView>
+    </AppBackground>
   );
 }
