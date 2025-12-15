@@ -1,5 +1,5 @@
 git add .
-git commit -m"a"
+git commit -m"fixing buttons"
 git push
 
 npx eas build --platform ios --profile production
@@ -36,3 +36,5 @@ build and submit
 
    npm run build:ios
    npm run submit:ios
+
+   npm run build-and-submit:ios

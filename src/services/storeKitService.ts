@@ -33,19 +33,32 @@ class StoreKitService {
     'com.popcam.app.credits96': 96,
   };
 
+  private initialized: boolean = false;
+  private initPromise: Promise<void> | null = null;
+
   /**
    * Initialize the StoreKit service
    */
   async initialize(): Promise<void> {
-    try {
-      const available: boolean = await initConnection();
-      if (!available) {
-        throw new Error('StoreKit not available on this device');
+    if (this.initialized) return;
+    if (this.initPromise) return this.initPromise;
+
+    this.initPromise = (async () => {
+      try {
+        const available: boolean = await initConnection();
+        if (!available) {
+          throw new Error('StoreKit not available on this device');
+        }
+        this.initialized = true;
+      } catch (error) {
+        console.error('Error initializing StoreKit:', error);
+        throw error;
+      } finally {
+        this.initPromise = null;
       }
-    } catch (error) {
-      console.error('Error initializing StoreKit:', error);
-      throw error;
-    }
+    })();
+
+    return this.initPromise;
   }
 
   /**
@@ -53,6 +66,10 @@ class StoreKitService {
    */
   async getProducts(): Promise<InAppProduct[]> {
     try {
+      if (!this.initialized) {
+        await this.initialize();
+      }
+
       const products: Product[] = (await fetchProducts({ skus: this.productIds })) as Product[];
       console.log('Fetched products from store:', JSON.stringify(products, null, 2));
 
@@ -76,6 +93,10 @@ class StoreKitService {
    */
   async purchaseProduct(productId: string): Promise<Purchase> {
     try {
+      if (!this.initialized) {
+        await this.initialize();
+      }
+
       if (!productId) {
         throw new Error('Product ID is required for purchase');
       }
@@ -125,7 +146,11 @@ class StoreKitService {
    */
   async isAvailable(): Promise<boolean> {
     try {
-      return await initConnection();
+      // If already initialized, we are connected
+      if (this.initialized) return true;
+      // Otherwise try to connect
+      await this.initialize();
+      return this.initialized;
     } catch (error) {
       console.error('Error checking StoreKit availability:', error);
       return false;
@@ -137,6 +162,9 @@ class StoreKitService {
    */
   async getPendingPurchases(): Promise<Purchase[]> {
     try {
+      if (!this.initialized) {
+        await this.initialize();
+      }
       return await getAvailablePurchases();
     } catch (error) {
       console.error('Error getting pending purchases:', error);

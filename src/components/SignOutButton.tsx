@@ -7,6 +7,7 @@ import { RootStackParamList } from '../types';
 import { colors, spacing } from '../styles/sharedStyles';
 import { MaterialIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import GlassButton from './GlassButton';
 
 
 type SignOutButtonNavigationProp = StackNavigationProp<RootStackParamList>;
@@ -17,7 +18,7 @@ interface SignOutButtonProps {
   iconOnly?: boolean;
 }
 
-export const SignOutButton: React.FC<SignOutButtonProps> = ({ 
+export const SignOutButton: React.FC<SignOutButtonProps> = ({
   variant = 'secondary',
   size = 'medium',
   iconOnly = false,
@@ -36,53 +37,45 @@ export const SignOutButton: React.FC<SignOutButtonProps> = ({
   };
 
   const getButtonStyle = (): ViewStyle[] => {
-    const variantStyles: ViewStyle = variant === 'primary' 
-      ? styles.primaryButton 
-      : variant === 'secondary' 
-      ? styles.secondaryButton 
-      : styles.textButton;
+    const variantStyles: ViewStyle = variant === 'primary'
+      ? styles.primaryButton
+      : variant === 'secondary'
+        ? styles.secondaryButton
+        : styles.textButton;
 
-    const sizeStyles: ViewStyle = size === 'small' 
-      ? styles.smallButton 
-      : size === 'large' 
-      ? styles.largeButton 
-      : styles.mediumButton;
+    const sizeStyles: ViewStyle = size === 'small'
+      ? styles.smallButton
+      : size === 'large'
+        ? styles.largeButton
+        : styles.mediumButton;
 
     return [styles.button, variantStyles, sizeStyles];
   };
 
   const getTextStyle = (): TextStyle[] => {
-    const variantStyles: TextStyle = variant === 'primary' 
-      ? styles.primaryButtonText 
-      : variant === 'secondary' 
-      ? styles.secondaryButtonText 
-      : styles.textButtonText;
+    const variantStyles: TextStyle = variant === 'primary'
+      ? styles.primaryButtonText
+      : variant === 'secondary'
+        ? styles.secondaryButtonText
+        : styles.textButtonText;
 
-    const sizeStyles: TextStyle = size === 'small' 
-      ? styles.smallButtonText 
-      : size === 'large' 
-      ? styles.largeButtonText 
-      : styles.mediumButtonText;
+    const sizeStyles: TextStyle = size === 'small'
+      ? styles.smallButtonText
+      : size === 'large'
+        ? styles.largeButtonText
+        : styles.mediumButtonText;
 
     return [styles.buttonText, variantStyles, sizeStyles];
   };
 
   if (iconOnly) {
-    const dim = size === 'small' ? 36 : size === 'large' ? 48 : 40;
+    // Match BackButton style: size 40 default, using GlassButton
+    const buttonSize = size === 'small' ? 36 : size === 'large' ? 48 : 40;
+
     return (
-      <TouchableOpacity onPress={handleSignOut}>
-        <BlurView intensity={30} tint="light" style={{
-          width: dim,
-          height: dim,
-          borderRadius: dim / 2,
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderWidth: 1,
-          borderColor: 'rgba(255,255,255,0.45)'
-        }}>
-          <MaterialIcons name="logout" size={20} color={colors.danger} />
-        </BlurView>
-      </TouchableOpacity>
+      <GlassButton size={buttonSize} onPress={handleSignOut}>
+        <MaterialIcons name="logout" size={20} color={colors.danger} />
+      </GlassButton>
     );
   }
 
@@ -98,6 +91,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 10,
   },
   primaryButton: {
     backgroundColor: colors.danger,

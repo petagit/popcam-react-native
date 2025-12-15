@@ -1,24 +1,17 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { ENV } from '../constants/config';
-import { imageUtils } from '../utils/imageUtils';
 
 class R2Service {
     private s3Client: S3Client | null = null;
     private bucketName: string;
     private publicUrlBase: string;
+    // Simple cache to avoid re-signing constantly: Key -> { url, expiry }
+    private urlCache: Map<string, { url: string; expiresAt: number }> = new Map();
 
     constructor() {
         this.bucketName = ENV.R2_BUCKET_NAME;
-        this.publicUrlBase = `https://${ENV.R2_BUCKET_NAME}.${ENV.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`; // Fallback/Internal URL
-        // Note: Usually R2 has a custom domain or a specific public URL format.
-        // Ideally, the user provides a PUBLIC_URL_BASE env var. 
-        // For now, we'll try to construct or rely on the user mapped domain if they have one.
-        // Or we returns the key and let the app decide. 
-        // Let's assume we return a URL that IS accessible if the bucket is public or we use presigned (but user wants storage).
-        // R2 usually requires a custom domain for public access or a worker. 
-        // We will assume a standard custom domain pattern or public R2 dev URL for now.
-        // Actually, asking the user for a Public URL Base would be best, but let's stick to storing the KEY/Path mostly, 
-        // or constructing a probable URL.
+        this.publicUrlBase = `https://${ENV.R2_BUCKET_NAME}.${ENV.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
     }
 
     private getClient(): S3Client {
@@ -44,42 +37,112 @@ class R2Service {
     async uploadImage(localUri: string, userId: string): Promise<string | null> {
         try {
             const client = this.getClient();
-            // Use fetch to get blob directly, avoiding Buffer polyfill issues
             const response = await fetch(localUri);
-            const blob = await response.blob();
+            const arrayBuffer = await response.arrayBuffer();
 
             const fileName = `generated/${userId}/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
 
             const command = new PutObjectCommand({
                 Bucket: this.bucketName,
                 Key: fileName,
-                Body: blob,
+                Body: new Uint8Array(arrayBuffer),
                 ContentType: 'image/jpeg',
             });
 
             await client.send(command);
 
-            // Return the key or a constructed URL. 
-            // If the user hasn't set up a custom domain, they might need to viewing it via signed URL or public bucket.
-            // We'll return the Key prefixed with a marker so we know it's R2, or a public URL if configured.
-            // Let's assume there is an EXPO_PUBLIC_R2_PUBLIC_DOMAIN if they have one, otherwise we might be stuck.
-            // For now, let's return the key and we can construct a URL or use a presigned URL for viewing if private.
-            // But typically for an app feature like this, a public bucket or value is expected.
-
-            // Let's try to assume a standard R2 dev domain or let the user fix the domain later.
-            // We will return the S3 Key and handle "viewing" logic?
-            // Actually simpler: Return the full public URL if we can.
-
-            const publicDomain = process.env.EXPO_PUBLIC_R2_PUBLIC_DOMAIN;
-            if (publicDomain) {
-                return `${publicDomain}/${fileName}`;
-            }
-
-            return fileName; // Return key if no domain known
+            // Return the key. We don't return full URL here anymore because it might need signing.
+            // The caller should ideally just store the key, OR we return a signed URL for immediate use?
+            // Existing logic expected a "viewable" string. 
+            // If we return just the key, `NanoBananaResult` might fail if it expects a URL. 
+            // But `NanoBananaResult` uses localResultUri for display mostly.
+            // The return value was used for `custom_prompts.thumbnail_url`.
+            // Storing the KEY in DB is best practice.
+            return fileName;
         } catch (error) {
             console.error('Error uploading to R2:', error);
             return null;
         }
+    }
+
+    /**
+     * Resolves a path (key) to a usable URL. 
+     * If public domain is set, returns public URL (synchronous).
+     * If not, returns a Presigned URL (async).
+     */
+    async resolveUrl(path: string | undefined): Promise<string | null> {
+        if (!path) return null;
+        const isSignedUrl = path.includes('X-Amz-Signature') || path.includes('Expires=');
+
+        // If it's a signed URL, it might be expired. Try to extract the key to re-sign.
+        if (path.startsWith('http')) {
+            if (isSignedUrl) {
+                try {
+                    // Start after the domain (roughly). R2/S3 URLs are usually /BUCKET/KEY or HOST/KEY.
+                    // Our R2 URL: https://BUCKET.ACCOUNT.r2..../KEY
+                    const urlObj = new URL(path);
+                    const key = urlObj.pathname.startsWith('/') ? urlObj.pathname.substring(1) : urlObj.pathname;
+                    // Proceed to re-sign this key
+                    path = decodeURIComponent(key);
+                } catch (e) {
+                    console.warn('Failed to extract key from signed URL, returning as is', e);
+                    return path;
+                }
+            } else {
+                return path; // Static/Public URL, return as is
+            }
+        }
+
+        if (path.startsWith('file://')) return path;
+
+        const publicDomain = process.env.EXPO_PUBLIC_R2_PUBLIC_DOMAIN;
+        if (publicDomain) {
+            const cleanPath = path.startsWith('/') ? path.substring(1) : path;
+            const cleanDomain = publicDomain.endsWith('/') ? publicDomain.substring(0, publicDomain.length - 1) : publicDomain;
+            return `${cleanDomain}/${cleanPath}`;
+        }
+
+        // Generate Presigned URL
+        try {
+            // Check cache first
+            const cached = this.urlCache.get(path);
+            if (cached && cached.expiresAt > Date.now()) {
+                return cached.url;
+            }
+
+            // Generate new
+            const client = this.getClient();
+            const command = new GetObjectCommand({
+                Bucket: this.bucketName,
+                Key: path,
+            });
+
+            // Expires in 1 hour (3600s)
+            const url = await getSignedUrl(client, command, { expiresIn: 3600 });
+
+            // Cache it (expires in 55 mins to be safe)
+            this.urlCache.set(path, { url, expiresAt: Date.now() + 55 * 60 * 1000 });
+
+            return url;
+        } catch (error) {
+            console.error('Error signing URL:', error);
+            return null;
+        }
+    }
+
+    // Deprecated synchronous helper - will only work if public domain is set
+    getPublicUrlSync(path: string | undefined): string | undefined {
+        if (!path) return undefined;
+        if (path.startsWith('http') || path.startsWith('file://')) return path;
+
+        const publicDomain = process.env.EXPO_PUBLIC_R2_PUBLIC_DOMAIN;
+        if (publicDomain) {
+            const cleanPath = path.startsWith('/') ? path.substring(1) : path;
+            const cleanDomain = publicDomain.endsWith('/') ? publicDomain.substring(0, publicDomain.length - 1) : publicDomain;
+            return `${cleanDomain}/${cleanPath}`;
+        }
+        // If no public domain, return undefined or key? Return undefined to signal "need async resolution"
+        return undefined;
     }
 }
 

@@ -24,6 +24,67 @@ class SupabaseService {
     return !!this.supabase;
   }
 
+  private tokenProvider: (() => Promise<string | null>) | null = null;
+
+  async setTokenProvider(provider: () => Promise<string | null>) {
+    this.tokenProvider = provider;
+
+    // Re-initialize client with dynamic accessToken
+    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+    const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+
+    this.supabase = createClient(supabaseUrl, supabaseKey, {
+      accessToken: async () => {
+        const token = await this.tokenProvider?.();
+        return token || '';
+      },
+    });
+
+    console.log('[SupabaseService] Token provider configured.');
+  }
+
+  // Deprecated: Wraps static token in a provider
+  setAuthToken(token: string | null) {
+    if (token) {
+      this.setTokenProvider(async () => token);
+    } else {
+      // Clear
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+      const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+      this.supabase = createClient(supabaseUrl, supabaseKey);
+      this.tokenProvider = null;
+    }
+  }
+
+  logTokenDebug(token: string) {
+    // DEBUG: Decode token to verify algorithm
+    try {
+      const parts = token.split('.');
+      if (parts.length >= 2) {
+        // Manual base64url decode
+        let base64 = parts[0].replace(/-/g, '+').replace(/_/g, '/');
+        switch (base64.length % 4) {
+          case 0: break;
+          case 2: base64 += '=='; break;
+          case 3: base64 += '='; break;
+          default: break;
+        }
+
+        const headerJson = atob(base64);
+        const header = JSON.parse(headerJson);
+        console.log('[SupabaseService] 🔍 DECODED HEADER:', JSON.stringify(header));
+
+        if (header.alg === 'HS256') {
+          console.log('[SupabaseService] ✅ Algorithm correct (HS256).');
+        } else if (header.alg === 'RS256') {
+          console.log('[SupabaseService] ❌ Algorithm INCORRECT (RS256).');
+        }
+      }
+    } catch (e: any) {
+      console.warn('[SupabaseService] Could not inspect token:', e.message);
+    }
+  }
+
   async getUserCredits(userId: string, email?: string): Promise<number> {
     try {
       if (!this.supabase) {
@@ -201,14 +262,14 @@ class SupabaseService {
     }
   }
 
-  async getCustomPrompts(userId: string): Promise<{ id: string; prompt_text: string; title?: string; thumbnail_url?: string }[]> {
+  async getCustomPrompts(userId: string): Promise<{ id: string; prompt_text: string; title?: string; thumbnail_url?: string; secondary_image_url?: string }[]> {
     try {
       if (!this.supabase) return [];
 
       console.log('[SupabaseService] getCustomPrompts called for:', userId);
       const { data, error } = await this.supabase
         .from('custom_prompts')
-        .select('id, prompt_text, title, thumbnail_url')
+        .select('id, prompt_text, title, thumbnail_url, secondary_image_url')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(20);
@@ -223,7 +284,8 @@ class SupabaseService {
         id: item.id,
         prompt_text: item.prompt_text,
         title: item.title,
-        thumbnail_url: item.thumbnail_url
+        thumbnail_url: item.thumbnail_url,
+        secondary_image_url: item.secondary_image_url
       }));
     } catch (error) {
       console.error('[SupabaseService] Error in getCustomPrompts:', error);
@@ -252,7 +314,7 @@ class SupabaseService {
     }
   }
 
-  async saveCustomPrompt(userId: string, prompt: string, title?: string, thumbnailUrl?: string): Promise<string | null> {
+  async saveCustomPrompt(userId: string, prompt: string, title?: string, thumbnailUrl?: string, secondaryImageUrl?: string): Promise<string | null> {
     try {
       if (!this.supabase) throw new Error('Supabase not configured');
 
@@ -262,7 +324,8 @@ class SupabaseService {
           user_id: userId,
           prompt_text: prompt,
           title: title,
-          thumbnail_url: thumbnailUrl
+          thumbnail_url: thumbnailUrl,
+          secondary_image_url: secondaryImageUrl
         })
         .select('id')
         .single();
@@ -279,7 +342,7 @@ class SupabaseService {
     }
   }
 
-  async updateCustomPrompt(id: string, userId: string, updates: { prompt_text?: string; title?: string; thumbnail_url?: string }): Promise<boolean> {
+  async updateCustomPrompt(id: string, userId: string, updates: { prompt_text?: string; title?: string; thumbnail_url?: string; secondary_image_url?: string }): Promise<boolean> {
     try {
       if (!this.supabase) return false;
 
@@ -310,16 +373,53 @@ class SupabaseService {
           user_id: userId,
           image_url: imageUrl,
           created_at: new Date().toISOString(),
-        }); // Note: prompt not in schema yet for this table based on previous check, but could be added. 
-      // Previous check showed: imageUrl, userId, createdAt.
+          prompt: prompt, // Try to save prompt if column exists (it should be added to schema if not)
+        });
 
       if (error) {
-        console.error('Error saving generated image metadata:', error);
-        throw error;
+        // If error is about missing column 'prompt', try without it
+        if (error.message?.includes('column "prompt" of relation "generated_images" does not exist')) {
+          console.warn('[SupabaseService] Prompt column missing, saving without prompt');
+          const { error: retryError } = await this.supabase
+            .from('generated_images')
+            .insert({
+              user_id: userId,
+              image_url: imageUrl,
+              created_at: new Date().toISOString(),
+            });
+          if (retryError) throw retryError;
+        } else {
+          console.error('Error saving generated image metadata:', error);
+          throw error;
+        }
       }
     } catch (error) {
       console.error('Error in saveGeneratedImage:', error);
       throw error;
+    }
+  }
+
+  async getGeneratedImages(userId: string, limit: number = 50): Promise<{ id: string; image_url: string; created_at: string; prompt?: string }[]> {
+    try {
+      if (!this.supabase) return [];
+
+      console.log('[SupabaseService] getGeneratedImages called for:', userId, 'limit:', limit);
+      const { data, error } = await this.supabase
+        .from('generated_images')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      if (error) {
+        console.error('[SupabaseService] Error fetching generated images:', error);
+        return [];
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('[SupabaseService] Error in getGeneratedImages:', error);
+      return [];
     }
   }
 
@@ -345,6 +445,17 @@ class SupabaseService {
     } catch (error) {
       console.error('Supabase connection check threw error:', error);
       return false;
+    }
+  }
+
+  async debugConnection(): Promise<string> {
+    if (!this.supabase) return 'Supabase client not initialized.';
+    try {
+      const { error } = await this.supabase.from('users').select('*', { count: 'exact', head: true });
+      if (error) return `Connection Failed: ${error.message} (Code: ${error.code})`;
+      return 'Success! Connected to Supabase.';
+    } catch (e: any) {
+      return `Exception: ${e.message}`;
     }
   }
 }

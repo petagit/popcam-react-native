@@ -21,7 +21,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useUser } from '@clerk/clerk-expo';
 import GlassButton from '../components/GlassButton';
-import BackButton from '../components/BackButton';
+import BackButton from '../components/buttons/BackButton';
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system/legacy';
 import tw from 'twrnc';
@@ -31,14 +31,14 @@ import { MaterialIcons, FontAwesome, MaterialCommunityIcons } from '@expo/vector
 import CameraButton from '../components/CameraButton';
 import AppBackground from '../components/AppBackground';
 
-type AnalysisScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Analysis'>;
-type AnalysisScreenRouteProp = RouteProp<RootStackParamList, 'Analysis'>;
+type GalleryImageScreenNavigationProp = StackNavigationProp<RootStackParamList, 'GalleryImage'>;
+type GalleryImageScreenRouteProp = RouteProp<RootStackParamList, 'GalleryImage'>;
 
 const { width } = Dimensions.get('window');
 
-export default function AnalysisScreen(): React.JSX.Element {
-  const navigation = useNavigation<AnalysisScreenNavigationProp>();
-  const route = useRoute<AnalysisScreenRouteProp>();
+export default function GalleryImageScreen(): React.JSX.Element {
+  const navigation = useNavigation<GalleryImageScreenNavigationProp>();
+  const route = useRoute<GalleryImageScreenRouteProp>();
   const { user } = useUser();
   const { imageUri, infographicUri, showInfographicFirst = false, analysisId } = route.params;
 
@@ -491,7 +491,7 @@ export default function AnalysisScreen(): React.JSX.Element {
         {/* Overlay Header Buttons */}
         <SafeAreaView style={tw`absolute top-0 left-0 right-0`} pointerEvents="box-none">
           <View style={tw`flex-row justify-between items-center px-5 py-4`}>
-            <BackButton color="#ffffff" style={tw`bg-black/40`} />
+            <BackButton />
 
             <CameraButton
               onPress={() => navigation.navigate('Camera')}

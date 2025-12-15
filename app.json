@@ -13,7 +13,7 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "buildNumber": "23",
+      "buildNumber": "25",
       "supportsTablet": false,
       "requireFullScreen": true,
       "bundleIdentifier": "com.popcam.app",

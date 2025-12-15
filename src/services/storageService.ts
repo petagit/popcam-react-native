@@ -2,6 +2,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ImageAnalysis } from '../types';
 import { supabaseService } from './supabaseService';
+import { r2Service } from './r2Service';
 import { STORAGE_KEYS, APP_CONFIG } from '../constants/config';
 import { imageUtils } from '../utils/imageUtils';
 
@@ -123,13 +124,40 @@ class StorageService {
         // Local file missing. Check for Cloud URL
         if (parsedAnalysis.cloudUrl) {
           console.log(`[Storage] Local file missing for ${parsedAnalysis.id}, falling back to Cloud URL`);
-          // Use cloud URL as imageUri for display
-          // We assume cloud URL is valid/accessible if present
-          validatedAnalyses.push({
-            ...parsedAnalysis,
-            imageUri: parsedAnalysis.cloudUrl,
-          });
-          hasChanges = true;
+
+          // Resolve the cloud URL (it might be a key needing signing)
+          const resolvedUrl = await r2Service.resolveUrl(parsedAnalysis.cloudUrl);
+
+          if (resolvedUrl) {
+            validatedAnalyses.push({
+              ...parsedAnalysis,
+              imageUri: resolvedUrl,
+            });
+            hasChanges = true; // We updated the imageUri in memory (not persisted unless we save, but we don't save signed URLs to disk typically?)
+            // Actually, we shouldn't save the SIGNED url to disk as 'imageUri' because it expires.
+            // But 'getAnalyses' returns the runtime object.
+            // The cleanup logic below (lines 142) saves 'validatedAnalyses' to disk.
+            // IF we save the signed URL to disk, it will expire. 
+            // We should probably NOT mark 'hasChanges = true' if the only change is resolving the URL for display.
+            // BUT we are in the loop where we are building 'validatedAnalyses'.
+            // If we don't add it to validatedAnalyses, it gets dropped.
+            // If we do add it, it gets saved to disk if 'hasChanges' is true (triggered by other cleanups).
+
+            // CRITICAL: We should probably keep 'imageUri' as the key on disk if we can't verify it?
+            // Or better: Don't modify the object on disk, but modify the returned object.
+            // BUT 'validatedAnalyses' is used for BOTH return AND save.
+            // We need to separate them if we want ephemeral URLs.
+            // However, simpler fix for now: return the resolved URL. 
+            // If it gets saved to disk, it expires in 1 hour. Next load -> local file missing -> resolves again.
+            // This is acceptable overhead.
+            hasChanges = true;
+          } else {
+            // resolution failed (maybe key invalid?), treat as missing
+            console.warn(`[Storage] Cloud URL resolution failed for ${parsedAnalysis.id}`);
+            // If we want to be safe, maybe don't delete it yet? But logic implies cleanup.
+            // We'll treat it as lost if we can't resolve it.
+            hasChanges = true;
+          }
           continue;
         }
 
@@ -253,6 +281,38 @@ class StorageService {
   }
 
   /**
+          tags: ['restored'],
+          timestamp: new Date(item.created_at),
+          hasInfographic: true, // check this? generated_images are usually results.
+          userId: userId,
+        };
+
+        newAnalyses.push(newAnalysis);
+        addedCount++;
+      }
+
+      if (addedCount > 0) {
+        console.log(`[Storage] Restoring ${addedCount} images from cloud.`);
+        // Merge and save
+        // We put new ones at the top? Or sort by date?
+        const merged = [...newAnalyses, ...localAnalyses].sort((a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+
+        await this.saveAnalyses(merged, userId);
+
+        // Trigger a get to ensure URLs are resolved for immediate display?
+        // User likely will refresh or component will re-render.
+      }
+
+      return addedCount;
+    } catch (error) {
+      console.error('[Storage] Error syncing cloud history:', error);
+      return 0;
+    }
+  }
+
+  /**
    * Get storage usage information
    */
   async getStorageInfo(): Promise<{ totalFiles: number; totalSize: number; formattedSize: string }> {
@@ -295,6 +355,61 @@ class StorageService {
     } catch (error) {
       console.error('Error loading API key:', error);
       return null;
+    }
+  }
+
+  async syncCloudHistory(userId: string): Promise<void> {
+    try {
+      console.log('[StorageService] Syncing cloud history for:', userId);
+      const cloudImages = await supabaseService.getGeneratedImages(userId, 50); // Get last 50
+      if (cloudImages.length === 0) return;
+
+      const localAnalyses = await this.getAnalyses(userId);
+      const storageKey = `${STORAGE_KEYS.ANALYSES}_${userId}`;
+      let hasChanges = false;
+      const newAnalyses = [...localAnalyses];
+
+      for (const cloudItem of cloudImages) {
+        // Check if exists locally
+        // We compare cloudUrl or infographicUri or simply if we have an analysis with this cloudUrl
+        const exists = localAnalyses.some(a =>
+          a.cloudUrl === cloudItem.image_url ||
+          a.infographicUri === cloudItem.image_url ||
+          (a.imageUri && a.imageUri.endsWith(cloudItem.image_url)) // Check suffix if full URL vs key
+        );
+
+        if (!exists) {
+          console.log('[StorageService] Restoring missing item:', cloudItem.id);
+          // Create new analysis object
+          const newAnalysis: ImageAnalysis = {
+            id: cloudItem.id, // Use Supabase ID
+            imageUri: cloudItem.image_url, // UI handles resolving this key
+            infographicUri: cloudItem.image_url,
+            hasInfographic: true,
+            description: cloudItem.prompt || 'Restored Generation',
+            tags: ['restored', 'nano-banana'],
+            timestamp: new Date(cloudItem.created_at),
+            userId: userId,
+            cloudUrl: cloudItem.image_url
+          };
+          newAnalyses.push(newAnalysis);
+          hasChanges = true;
+        }
+      }
+
+      if (hasChanges) {
+        // storageService.saveAnalyses expects to overwrite or we update manually
+        // We can just setItem directly since we constructed the full list
+        // Sort by timestamp desc
+        newAnalyses.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        await AsyncStorage.setItem(storageKey, JSON.stringify(newAnalyses));
+        console.log('[StorageService] Synced and saved', newAnalyses.length, 'analyses');
+      } else {
+        console.log('[StorageService] No new items to sync');
+      }
+
+    } catch (error) {
+      console.error('[StorageService] Sync error:', error);
     }
   }
 
@@ -353,7 +468,7 @@ class StorageService {
     }
   }
 
-  async getCustomPromptHistory(userId?: string): Promise<{ id: string; prompt_text: string; title?: string; thumbnail_url?: string }[]> {
+  async getCustomPromptHistory(userId?: string): Promise<{ id: string; prompt_text: string; title?: string; thumbnail_url?: string; secondary_image_url?: string }[]> {
     try {
       if (userId) {
         return await supabaseService.getCustomPrompts(userId);
@@ -391,13 +506,14 @@ class StorageService {
     prompt: string,
     userId?: string,
     title?: string,
-    thumbnailUrl?: string
+    thumbnailUrl?: string,
+    secondaryImageUrl?: string
   ): Promise<string | null> {
     try {
       if (!prompt || !prompt.trim()) return null;
 
       if (userId) {
-        return await supabaseService.saveCustomPrompt(userId, prompt, title, thumbnailUrl);
+        return await supabaseService.saveCustomPrompt(userId, prompt, title, thumbnailUrl, secondaryImageUrl);
       }
 
       // Fallback local logic
@@ -409,7 +525,8 @@ class StorageService {
         id: newId,
         prompt_text: prompt,
         title: title,
-        thumbnail_url: thumbnailUrl
+        thumbnail_url: thumbnailUrl,
+        secondary_image_url: secondaryImageUrl
       };
 
       // Filter out exact duplicate prompt text if we want to avoid dupes? 
@@ -428,7 +545,7 @@ class StorageService {
 
   async updateCustomPromptInHistory(
     id: string,
-    updates: { prompt_text?: string; title?: string; thumbnail_url?: string },
+    updates: { prompt_text?: string; title?: string; thumbnail_url?: string; secondary_image_url?: string },
     userId?: string
   ): Promise<void> {
     try {

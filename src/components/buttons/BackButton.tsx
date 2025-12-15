@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
-import GlassButton from './GlassButton';
+import GlassButton from '../GlassButton';
 
 interface BackButtonProps {
     onPress?: () => void;

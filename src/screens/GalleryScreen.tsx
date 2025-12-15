@@ -20,7 +20,7 @@ import { storageService } from '../services/storageService';
 import CameraButton from '../components/CameraButton';
 import { MaterialIcons } from '@expo/vector-icons';
 import GlassButton from '../components/GlassButton';
-import BackButton from '../components/BackButton';
+import BackButton from '../components/buttons/BackButton';
 import AppBackground from '../components/AppBackground';
 
 type GalleryScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Gallery'>;
@@ -134,12 +134,39 @@ export default function GalleryScreen(): React.JSX.Element {
   const loadAnalyses = async (): Promise<void> => {
     try {
       setIsLoading(true);
+
+      // Sync with cloud history first to restore any missing items
+      if (user?.id) {
+        try {
+          await storageService.syncCloudHistory(user.id);
+        } catch (syncError) {
+          console.warn('Background sync failed, showing local data only:', syncError);
+        }
+      }
+
       const savedAnalyses: ImageAnalysis[] = await storageService.getAnalyses(user?.id);
       // Filter to only show analyses with AI generations
       const infographicAnalyses: ImageAnalysis[] = savedAnalyses.filter(
         (analysis: ImageAnalysis) => analysis.hasInfographic && analysis.infographicUri
       );
-      const grouped: GroupedAnalysis[] = groupAnalysesByDate(infographicAnalyses);
+      // Resolve URLs for R2 keys
+      const { r2Service } = require('../services/r2Service');
+      const resolvedAnalyses = await Promise.all(infographicAnalyses.map(async (a) => {
+        let resolved = { ...a };
+        // Resolve main image URI if it looks like a key (not http/file)
+        if (a.imageUri && !a.imageUri.startsWith('http') && !a.imageUri.startsWith('file://')) {
+          const url = await r2Service.resolveUrl(a.imageUri);
+          if (url) resolved.imageUri = url;
+        }
+        // Resolve infographic URI
+        if (a.infographicUri && !a.infographicUri.startsWith('http') && !a.infographicUri.startsWith('file://')) {
+          const url = await r2Service.resolveUrl(a.infographicUri);
+          if (url) resolved.infographicUri = url;
+        }
+        return resolved;
+      }));
+
+      const grouped: GroupedAnalysis[] = groupAnalysesByDate(resolvedAnalyses);
       const flatData: ListItem[] = createFlatListData(grouped);
       setListData(flatData);
     } catch (error) {
@@ -157,7 +184,7 @@ export default function GalleryScreen(): React.JSX.Element {
   };
 
   const handleAnalysisPress = (analysis: ImageAnalysis): void => {
-    navigation.navigate('Analysis', {
+    navigation.navigate('GalleryImage', {
       imageUri: analysis.imageUri,
       infographicUri: analysis.infographicUri,
       showInfographicFirst: analysis.hasInfographic && !!analysis.infographicUri,

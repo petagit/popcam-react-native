@@ -18,7 +18,7 @@ import { storageService } from '../services/storageService';
 import { supabaseService } from '../services/supabaseService';
 import { MaterialIcons } from '@expo/vector-icons';
 import GlassButton from '../components/GlassButton';
-import BackButton from '../components/BackButton';
+import BackButton from '../components/buttons/BackButton';
 import AppBackground from '../components/AppBackground';
 import { useCredits } from '../hooks/useCredits';
 
@@ -75,7 +75,7 @@ export default function SettingsScreen() {
   const handleClearAllData = async (): Promise<void> => {
     Alert.alert(
       'Clear All Data',
-      'This will delete all analyses and settings. This action cannot be undone.',
+      'This will delete all photos and settings. This action cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -104,7 +104,7 @@ export default function SettingsScreen() {
   const handleDeleteAccount = (): void => {
     Alert.alert(
       'Delete Account',
-      'Are you sure you want to delete your account? This will permanently delete:\n\n• Your account and profile\n• All your analyses and photos\n• Your credits and preferences\n\nThis action cannot be undone.',
+      'Are you sure you want to delete your account? This will permanently delete:\n\n• Your account and profile\n• All your photos\n• Your credits and preferences\n\nThis action cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -219,9 +219,9 @@ export default function SettingsScreen() {
 
             <View style={tw`flex-row items-center py-3 border-b border-gray-100`}>
               <View style={tw`flex-1 mr-4`}>
-                <Text style={tw`text-base font-medium text-gray-800 mb-1`}>Auto-save Analyses</Text>
+                <Text style={tw`text-base font-medium text-gray-800 mb-1`}>Auto-save Photos</Text>
                 <Text style={tw`text-sm text-gray-600 leading-4`}>
-                  Automatically save AI analyses locally
+                  Automatically save AI photos locally
                 </Text>
               </View>
               <Switch
@@ -236,7 +236,7 @@ export default function SettingsScreen() {
               <View style={tw`flex-1 mr-4`}>
                 <Text style={tw`text-base font-medium text-gray-800 mb-1`}>High Quality Images</Text>
                 <Text style={tw`text-sm text-gray-600 leading-4`}>
-                  Send higher quality images for analysis (uses more data)
+                  Send higher quality images for photos (uses more data)
                 </Text>
               </View>
               <Switch
@@ -251,7 +251,7 @@ export default function SettingsScreen() {
               <View style={tw`flex-1 mr-4`}>
                 <Text style={tw`text-base font-medium text-gray-800 mb-1`}>Show Tags</Text>
                 <Text style={tw`text-sm text-gray-600 leading-4`}>
-                  Display AI-generated tags with analyses
+                  Display AI-generated tags with photos
                 </Text>
               </View>
               <Switch
@@ -332,7 +332,7 @@ export default function SettingsScreen() {
             <Text style={tw`text-lg font-bold text-gray-800 mb-4`}>About</Text>
             <Text style={tw`text-sm text-gray-600 leading-5`}>
               PopCam v1.0.0{'\n'}
-              AI-powered photo analysis app{'\n'}
+              AI-powered photos app{'\n'}
               Built with React Native & OpenAI
             </Text>
           </View>

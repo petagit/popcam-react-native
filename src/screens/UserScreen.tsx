@@ -20,9 +20,12 @@ import { storageService } from '../services/storageService';
 import { SignOutButton } from '../components/SignOutButton';
 import { UserProfileSection } from '../components/UserProfileSection';
 import GlassButton from '../components/GlassButton';
-import BackButton from '../components/BackButton';
+import SettingsButton from '../components/buttons/SettingsButton';
+import CreditsButton from '../components/buttons/CreditsButton';
+import BackButton from '../components/buttons/BackButton';
 import AppBackground from '../components/AppBackground';
 import { BlurView } from 'expo-blur';
+import { colors, spacing, shadows } from '../styles/sharedStyles';
 
 type MaterialIconName = keyof typeof MaterialIcons.glyphMap;
 
@@ -51,6 +54,10 @@ export default function UserScreen(): React.JSX.Element {
 
   const loadRecentGenerations = async (): Promise<void> => {
     try {
+      if (user?.id) {
+        // Automatically try to restore missing items from cloud history
+        await storageService.syncCloudHistory(user.id);
+      }
       const analyses: ImageAnalysis[] = await storageService.getAnalyses(user?.id);
       setRecentGenerations(analyses.slice(0, 6));
     } catch (error) {
@@ -81,11 +88,30 @@ export default function UserScreen(): React.JSX.Element {
     navigation.navigate('PurchaseCredits');
   };
 
+  const handleDebugPress = async () => {
+    // Import here to avoid cycle or assume imported supabaseService
+    const { supabaseService } = require('../services/supabaseService'); // Ensure correct import
+    setIsLoading(true);
+    const result = await supabaseService.debugConnection();
+    setIsLoading(false);
+    Alert.alert('Connection Test', result);
+  };
+
   const quickActions: QuickAction[] = [
+    {
+      id: 'camera',
+      title: 'Back to PopCam',
+      subtitle: 'Take photos',
+      icon: 'camera-alt',
+      onPress: handleCameraPress,
+      accentColor: '#ea580c', // orange-600
+      backgroundColor: '#ffedd5', // orange-100 (unused in render but kept for consistency)
+      iconBackground: '#fed7aa', // orange-200
+    },
     {
       id: 'gallery',
       title: 'Gallery',
-      subtitle: 'Browse previous generations',
+      subtitle: 'View photos',
       icon: 'collections',
       onPress: handleGalleryPress,
       accentColor: '#2563eb',
@@ -94,9 +120,9 @@ export default function UserScreen(): React.JSX.Element {
     },
     {
       id: 'credits',
-      title: 'Get Credits',
-      subtitle: 'Top up balance',
-      icon: 'shopping-bag',
+      title: 'Buy Credits',
+      subtitle: 'Get more',
+      icon: 'bolt',
       onPress: handlePurchaseCreditsPress,
       accentColor: '#059669',
       backgroundColor: '#d1fae5',
@@ -105,7 +131,7 @@ export default function UserScreen(): React.JSX.Element {
   ];
 
   const handleAnalysisPress = (analysis: ImageAnalysis): void => {
-    navigation.navigate('Analysis', {
+    navigation.navigate('GalleryImage', {
       imageUri: analysis.imageUri,
       infographicUri: analysis.infographicUri,
       showInfographicFirst: analysis.hasInfographic && !!analysis.infographicUri
@@ -157,9 +183,11 @@ export default function UserScreen(): React.JSX.Element {
           <View style={tw`flex-row justify-between items-center mb-4`}>
             <BackButton />
             <View style={tw`flex-row items-center gap-3`}>
-              <GlassButton size={40} onPress={handleSettingsPress} intensity={40} style={tw`bg-white/20`}>
-                <MaterialIcons name="settings" size={20} color="#111827" />
-              </GlassButton>
+              <TouchableOpacity onPress={handleDebugPress} style={tw`bg-red-100 px-2 py-1 rounded`}>
+                <Text style={tw`text-xs text-red-800`}>Test DB</Text>
+              </TouchableOpacity>
+              <CreditsButton variant="glass" />
+              <SettingsButton />
               {user && <SignOutButton iconOnly size="small" />}
             </View>
           </View>
@@ -178,20 +206,9 @@ export default function UserScreen(): React.JSX.Element {
         {/* User summary */}
         {user && <UserProfileSection style={tw`mx-6 mb-4`} />}
 
-        {/* Primary action card */}
-        <View style={tw`px-6`}>
-          <TouchableOpacity onPress={handleCameraPress} activeOpacity={0.92}>
-            <BlurView
-              intensity={40}
-              tint="light"
-              style={[tw`rounded-3xl px-6 py-8 shadow-sm overflow-hidden border border-white/30`, { backgroundColor: '#EDCFAC' }]}
-            >
-              <View style={tw`items-center justify-center w-full`}>
-                <Text style={tw`text-gray-900 text-2xl font-bold text-center`}>Back to PopCam</Text>
-              </View>
-            </BlurView>
-          </TouchableOpacity>
-        </View>
+
+
+
 
         {/* Quick actions */}
         <View style={tw`px-6 mt-5`}>
@@ -201,12 +218,16 @@ export default function UserScreen(): React.JSX.Element {
                 key={action.id}
                 onPress={action.onPress}
                 activeOpacity={0.85}
-                style={[tw`w-[48%]`, { height: 120 }]}
+                style={[tw`flex-1`, { height: 140 }]}
               >
-                <BlurView
-                  intensity={40}
-                  tint="light"
-                  style={[tw`flex-1 items-center justify-center rounded-2xl p-4 border border-white/30 overflow-hidden`, { backgroundColor: '#EDCFAC' }]}
+                <View
+                  style={[
+                    tw`flex-1 items-center justify-center p-4 bg-white`,
+                    {
+                      borderRadius: spacing.md,
+                      ...shadows.small
+                    }
+                  ]}
                 >
                   <View
                     style={[
@@ -216,11 +237,21 @@ export default function UserScreen(): React.JSX.Element {
                   >
                     <MaterialIcons name={action.icon} size={22} color={action.accentColor} />
                   </View>
-                  <Text style={tw`text-sm font-semibold text-gray-900 text-center`}>{action.title}</Text>
-                  <Text style={tw`text-xs text-gray-700 mt-1 text-center`} numberOfLines={2}>
+                  <Text style={{
+                    fontSize: 18,
+                    fontWeight: '600',
+                    color: colors.text.primary,
+                    textAlign: 'center'
+                  }}>{action.title}</Text>
+                  <Text style={{
+                    fontSize: 14,
+                    color: colors.text.secondary,
+                    marginTop: 4,
+                    textAlign: 'center'
+                  }} numberOfLines={2}>
                     {action.subtitle}
                   </Text>
-                </BlurView>
+                </View>
               </TouchableOpacity>
             ))}
           </View>

@@ -26,7 +26,7 @@ import { supabaseService } from '../services/supabaseService';
 import { useCredits } from '../hooks/useCredits';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import GlassButton from '../components/GlassButton';
-import BackButton from '../components/BackButton';
+import BackButton from '../components/buttons/BackButton';
 import AppBackground from '../components/AppBackground';
 
 type PurchaseCreditsScreenNavigationProp = StackNavigationProp<RootStackParamList, 'PurchaseCredits'>;

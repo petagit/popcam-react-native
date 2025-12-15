@@ -19,3 +19,5 @@ cd ios && pod install && cd ..
 
 # 3. Then try running your app again:
 npm run ios -- --device
+
+

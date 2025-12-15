@@ -32,7 +32,7 @@ export type RootStackParamList = {
   IntroAnimation: undefined;
   Home: undefined;
   Camera: undefined;
-  Analysis: {
+  GalleryImage: {
     imageUri: string;
     infographicUri?: string;
     showInfographicFirst?: boolean;

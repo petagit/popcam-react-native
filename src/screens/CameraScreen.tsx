@@ -20,6 +20,7 @@ import { imageUtils } from '../utils/imageUtils';
 import { storageService } from '../services/storageService';
 import { useCredits } from '../hooks/useCredits';
 import GlassButton from '../components/GlassButton';
+import CreditsButton from '../components/buttons/CreditsButton';
 import { MaterialIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { NANO_BANANA_PRESETS } from '../lib/nanobanana-presets';
@@ -46,7 +47,7 @@ export default function CameraScreen(): React.JSX.Element {
   const [zoom, setZoom] = useState<number>(0);
 
   const { width } = useWindowDimensions();
-  const camHeight = width * (4 / 3);
+  // const camHeight = width * (4 / 3); // Removed fixed 4:3 ratio to allow full screen
 
   useEffect(() => {
     requestPermissions();
@@ -392,7 +393,11 @@ export default function CameraScreen(): React.JSX.Element {
   if (hasPermission === null) {
     return (
       <View style={tw`flex-1 justify-center items-center bg-gray-100`}>
-        <ActivityIndicator size="large" color="#3498db" />
+        <Image
+          source={require('../../assets/loading-animation.gif')}
+          style={{ width: 80, height: 80 }}
+          resizeMode="contain"
+        />
         <Text style={tw`mt-4 text-base text-gray-700`}>Loading camera…</Text>
       </View>
     );
@@ -413,7 +418,7 @@ export default function CameraScreen(): React.JSX.Element {
     <View style={tw`flex-1 bg-black`}>
       <StatusBar style="light" />
 
-      <View style={{ height: camHeight, width: width, overflow: 'hidden' }}>
+      <View style={tw`flex-1 overflow-hidden`}>
         <CameraView
           ref={cameraRef}
           style={tw`flex-1`}
@@ -422,7 +427,7 @@ export default function CameraScreen(): React.JSX.Element {
         />
 
         {/* Zoom Controls */}
-        <View style={tw`absolute bottom-4 left-0 right-0 flex-row justify-center items-center gap-4`}>
+        <View style={tw`absolute bottom-44 left-0 right-0 flex-row justify-center items-center gap-4`}>
           {[0, 0.1, 0.2].map((z, index) => {
             const label = index === 0 ? '1x' : index === 1 ? '2x' : '3x';
             const isSelected = zoom === z;
@@ -451,20 +456,7 @@ export default function CameraScreen(): React.JSX.Element {
         <GlassButton size={44} onPress={selectFromGallery}>
           <MaterialIcons name="file-upload" size={20} color="#111827" />
         </GlassButton>
-        <TouchableOpacity onPress={() => navigation.navigate('PurchaseCredits')} activeOpacity={0.8}>
-          <BlurView
-            intensity={25}
-            tint="light"
-            style={[tw`px-4 py-2 rounded-full flex-row items-center`, { backgroundColor: 'transparent', overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.45)' }]}
-          >
-            <MaterialIcons name="bolt" size={18} color="#111827" style={tw`mr-1`} />
-            {creditsLoading ? (
-              <ActivityIndicator size="small" color="#111827" />
-            ) : (
-              <Text style={tw`text-sm text-gray-900 font-bold`}>{credits}</Text>
-            )}
-          </BlurView>
-        </TouchableOpacity>
+        <CreditsButton variant="glass" />
       </View>
 
       {/* Preset Name Display */}
@@ -524,9 +516,13 @@ export default function CameraScreen(): React.JSX.Element {
 
       {
         isCapturing && (
-          <View style={tw`absolute top-0 left-0 right-0 bottom-0 bg-black bg-opacity-40 justify-center items-center`}>
-            <ActivityIndicator size="large" color="#ffffff" />
-            <Text style={tw`mt-3 text-white font-semibold`}>Capturing…</Text>
+          <View style={tw`absolute top-0 left-0 right-0 bottom-0 bg-black bg-opacity-80 justify-center items-center z-50`}>
+            <Image
+              source={require('../../assets/loading-animation.gif')}
+              style={{ width: 100, height: 100 }}
+              resizeMode="contain"
+            />
+            <Text style={tw`mt-4 text-white font-semibold text-lg`}>Processing...</Text>
           </View>
         )
       }

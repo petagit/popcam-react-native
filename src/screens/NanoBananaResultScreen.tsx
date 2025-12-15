@@ -19,7 +19,7 @@ import tw from 'twrnc';
 import { RootStackParamList, ImageAnalysis } from '../types';
 import { useUser } from '@clerk/clerk-expo';
 import AppBackground from '../components/AppBackground';
-import BackButton from '../components/BackButton';
+import BackButton from '../components/buttons/BackButton';
 import { NANO_BANANA_PRESETS, NanoBananaPreset } from '../lib/nanobanana-presets';
 import { useCredits } from '../hooks/useCredits';
 import { imageUtils } from '../utils/imageUtils';
@@ -391,39 +391,39 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
   }, [navigation]);
 
   return (
-    <AppBackground>
-      <SafeAreaView style={tw`flex-1`}>
-        <StatusBar style="dark" />
 
-        {/* Header */}
-        <View style={tw`flex-row items-center justify-between px-5 py-4 bg-[#F5F5DC] border-b border-gray-200`}>
-          <BackButton color="#3b82f6" />
-          <Text style={tw`text-lg font-semibold text-gray-800`} numberOfLines={1}>
-            Result Screen
-          </Text>
-          <TouchableOpacity
-            onPress={() => {
-              Alert.alert(
-                'Report Issue',
-                'If this image is offensive or inappropriate, please report it. We will review it within 24 hours.',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'Report',
-                    style: 'destructive',
-                    onPress: () => Alert.alert('Report Sent', 'Thank you for your feedback. We will review this image.')
-                  }
-                ]
-              );
-            }}
-            style={tw`py-2 px-3`}
-          >
-            <MaterialIcons name="flag" size={20} color="#ef4444" />
-          </TouchableOpacity>
-        </View>
+    <AppBackground>
+      <View style={tw`flex-1 bg-black`}>
+        <StatusBar style="light" />
+
+        {/* Floating Header */}
+        <SafeAreaView style={tw`absolute top-0 left-0 right-0 z-10`} pointerEvents="box-none">
+          <View style={tw`flex-row justify-between items-center px-5 py-2`}>
+            <BackButton color="#ffffff" style={tw`bg-black/40`} />
+            <TouchableOpacity
+              onPress={() => {
+                Alert.alert(
+                  'Report Issue',
+                  'If this image is offensive or inappropriate, please report it. We will review it within 24 hours.',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Report',
+                      style: 'destructive',
+                      onPress: () => Alert.alert('Report Sent', 'Thank you for your feedback. We will review this image.')
+                    }
+                  ]
+                );
+              }}
+              style={tw`w-10 h-10 items-center justify-center rounded-full bg-black/40`}
+            >
+              <MaterialIcons name="flag" size={20} color="#ffffff" />
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
 
         {/* Main Content Area - Full Screen Image Container */}
-        <View style={tw`flex-1 relative bg-black w-full overflow-hidden`}>
+        <View style={tw`flex-1 relative w-full overflow-hidden`}>
           <Pressable onPress={handleToggleImage} style={tw`flex-1 justify-center items-center w-full h-full`}>
 
             {/* Loading Overlay */}
@@ -468,7 +468,7 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
               <>
                 <View
                   style={[
-                    tw`absolute top-4 left-4 px-3 py-1 rounded-full`,
+                    tw`absolute top-20 left-4 px-3 py-1 rounded-full`,
                     { backgroundColor: 'rgba(0,0,0,0.6)' },
                   ]}
                 >
@@ -525,54 +525,57 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
         </View>
 
         {/* Footer Controls */}
-        <View style={tw`bg-[#F5F5DC] px-5 py-4 pb-8 border-t border-gray-200`}>
-          {/* Custom Prompt Display (Compact) */}
-          {(presetId === 'custom' || customPrompt) && (
-            <View style={tw`mb-4`}>
-              <Text numberOfLines={1} style={tw`text-xs text-gray-500 text-center`}>
-                Used: <Text style={tw`italic text-gray-800`}>{customPrompt || selectedPreset?.prompt}</Text>
-              </Text>
-            </View>
-          )}
+        <SafeAreaView style={tw`bg-white border-t border-gray-200`}>
+          <View style={tw`px-5 py-4`}>
+            {/* Custom Prompt Display (Compact) */}
+            {(presetId === 'custom' || customPrompt) && (
+              <View style={tw`mb-4`}>
+                <Text numberOfLines={1} style={tw`text-xs text-gray-500 text-center`}>
+                  Used: <Text style={tw`italic text-gray-800`}>{customPrompt || selectedPreset?.prompt}</Text>
+                </Text>
+              </View>
+            )}
 
-          <View style={tw`flex-row justify-between mb-3`}>
+            <View style={tw`flex-row justify-between mb-3`}>
+              <TouchableOpacity
+                style={[tw`flex-1 py-3 rounded-xl mr-2 items-center`, isGenerating ? tw`bg-gray-300` : tw`bg-blue-500`]}
+                onPress={handleShare}
+                disabled={isGenerating || !resultUri}
+              >
+                <Text style={tw`text-white font-semibold`}>Share</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={tw`flex-1 bg-green-500 py-3 rounded-xl ml-2 items-center`}
+                onPress={handleSaveToCameraRoll}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <View style={tw`flex-row items-center`}>
+                    <ActivityIndicator color="#fff" size="small" style={tw`mr-2`} />
+                    <Text style={tw`text-white font-semibold`}>Saving…</Text>
+                  </View>
+                ) : (
+                  <Text style={tw`text-white font-semibold`}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+
             <TouchableOpacity
-              style={[tw`flex-1 py-3 rounded-xl mr-2 items-center`, isGenerating ? tw`bg-gray-300` : tw`bg-blue-500`]}
-              onPress={handleShare}
-              disabled={isGenerating || !resultUri}
+              style={tw`py-3 rounded-xl border border-black bg-black items-center`}
+              onPress={handleMakeAnother}
             >
-              <Text style={tw`text-white font-semibold`}>Share</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={tw`flex-1 bg-green-500 py-3 rounded-xl ml-2 items-center`}
-              onPress={handleSaveToCameraRoll}
-              disabled={isSaving}
-            >
-              {isSaving ? (
-                <View style={tw`flex-row items-center`}>
-                  <ActivityIndicator color="#fff" size="small" style={tw`mr-2`} />
-                  <Text style={tw`text-white font-semibold`}>Saving…</Text>
-                </View>
-              ) : (
-                <Text style={tw`text-white font-semibold`}>Save</Text>
-              )}
+              <Text style={tw`text-white font-semibold`}>Make Another</Text>
             </TouchableOpacity>
           </View>
+        </SafeAreaView>
 
-          <TouchableOpacity
-            style={tw`py-3 rounded-xl border border-blue-200 bg-[#F5F5DC] items-center`}
-            onPress={handleMakeAnother}
-          >
-            <Text style={tw`text-blue-500 font-semibold`}>Make Another</Text>
-          </TouchableOpacity>
-        </View>
         <Toast
           visible={toastVisible}
           message={toastMessage}
           type={toastType}
           onDismiss={() => setToastVisible(false)}
         />
-      </SafeAreaView>
+      </View>
     </AppBackground>
   );
 }

@@ -35,7 +35,8 @@ import { CustomPromptPickerModal } from '../features/nano-banana/custom-prompts/
 import { r2Service } from '../services/r2Service';
 import { NanoBananaGrid, GridItem } from '../features/nano-banana/NanoBananaGrid';
 import GlassButton from '../components/GlassButton';
-import BackButton from '../components/BackButton';
+import CreditsButton from '../components/buttons/CreditsButton';
+import BackButton from '../components/buttons/BackButton';
 
 type NanoBananaScreenNavigationProp = StackNavigationProp<RootStackParamList, 'NanoBanana'>;
 type NanoBananaScreenRouteProp = RouteProp<RootStackParamList, 'NanoBanana'>;
@@ -195,18 +196,19 @@ export default function NanoBananaScreen(): React.JSX.Element {
     const finalPresetId = presetIdToUse;
     const finalPresetTitle = presetTitleToUse;
 
-    if (isPickerMode) {
-      if (user?.id) {
-        try {
-          // Save the preference
-          await storageService.saveUserPreferences({
-            nanoBananaLastPresetId: finalPresetId,
-            nanoBananaCustomPromptText: finalCustomPrompt, // Save the prompt text too
-          }, user.id);
-        } catch (error) {
-          console.warn('Failed to save preset preference', error);
-        }
+    // Save preference in BOTH modes so "Make Another" (which goes to Camera) picks up the latest choice
+    if (user?.id) {
+      try {
+        await storageService.saveUserPreferences({
+          nanoBananaLastPresetId: finalPresetId,
+          nanoBananaCustomPromptText: finalCustomPrompt,
+        }, user.id);
+      } catch (error) {
+        console.warn('Failed to save preset preference', error);
       }
+    }
+
+    if (isPickerMode) {
       navigation.goBack();
       return;
     }
@@ -386,10 +388,10 @@ export default function NanoBananaScreen(): React.JSX.Element {
         <StatusBar style="dark" />
 
         <View style={tw`flex-row items-center justify-between px-5 py-4 border-b border-gray-200`}>
-          <BackButton color="#3b82f6" />
+          <BackButton />
           <Text style={tw`text-lg font-semibold text-gray-800`}>Nano Banana Lab</Text>
           <TouchableOpacity onPress={() => setIsEditMode(!isEditMode)} style={tw`py-2 px-3`}>
-            <Text style={tw`text-base text-blue-500 font-semibold`}>{isEditMode ? 'Done' : 'Edit'}</Text>
+            <Text style={tw`text-base text-gray-900 font-semibold`}>{isEditMode ? 'Done' : 'Edit'}</Text>
           </TouchableOpacity>
         </View>
 
@@ -397,12 +399,7 @@ export default function NanoBananaScreen(): React.JSX.Element {
           <View style={tw`mb-4 bg-white rounded-2xl p-4 shadow-sm`}>
             <View style={tw`flex-row justify-between items-center mb-2`}>
               <Text style={tw`text-xl font-bold text-gray-900`}>Pick Your AI Filter</Text>
-              <TouchableOpacity style={tw`flex-row items-center`} onPress={() => navigation.navigate('PurchaseCredits')}>
-                <MaterialIcons name="bolt" size={16} color="#4b5563" style={tw`mr-1`} />
-                <Text style={tw`text-sm font-semibold text-gray-800`}>
-                  {creditsLoading ? '...' : credits}
-                </Text>
-              </TouchableOpacity>
+              <CreditsButton variant="minimal" />
             </View>
             {referenceImageUri && (
               <Text style={tw`mt-1 text-xs text-blue-600 font-semibold`}>
