@@ -123,7 +123,7 @@ export default function UserScreen(): React.JSX.Element {
     },
     {
       id: 'nano-banana',
-      title: 'AI Filters',
+      title: 'Filters',
       icon: 'auto-fix-high', // Magic icon representation
       onPress: handleNanoBananaPress,
       accentColor: '#9333ea', // purple-600
