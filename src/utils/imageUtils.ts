@@ -1,5 +1,6 @@
 import { APP_CONFIG } from '../constants/config';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as MediaLibrary from 'expo-media-library';
 import { Platform } from 'react-native';
 
 export interface ImageProcessingResult {
@@ -23,7 +24,7 @@ export const imageUtils = {
     try {
       const response = await fetch(imageUri);
       const blob = await response.blob();
-      
+
       return new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => {
@@ -145,22 +146,22 @@ export const imageUtils = {
       const timestamp = Date.now();
       const randomId = Math.random().toString(36).substr(2, 9);
       const finalFileName = fileName || `photo_${timestamp}_${randomId}.jpg`;
-      
+
       // Use document directory for permanent storage
       const destinationUri = `${FileSystem.documentDirectory}${finalFileName}`;
-      
+
       // Copy the file
       await FileSystem.copyAsync({
         from: sourceUri,
         to: destinationUri
       });
-      
+
       // Verify the file was copied successfully
       const fileInfo = await FileSystem.getInfoAsync(destinationUri);
       if (!fileInfo.exists) {
         throw new Error('Failed to copy image - file does not exist after copy');
       }
-      
+
       console.log('Image copied to app storage:', destinationUri);
       return destinationUri;
     } catch (error) {
@@ -235,11 +236,11 @@ export const imageUtils = {
    */
   formatFileSize(bytes: number): string {
     if (bytes === 0) return '0 Bytes';
-    
+
     const k = 1024;
     const sizes: string[] = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    
+
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   },
 
@@ -256,7 +257,7 @@ export const imageUtils = {
    */
   isValidImageUri(uri: string): boolean {
     if (!uri) return false;
-    
+
     // Check if it starts with file://, http://, https://, or data:
     const validProtocols = /^(file:\/\/|https?:\/\/|data:image\/)/;
     return validProtocols.test(uri);
@@ -287,7 +288,7 @@ export const imageUtils = {
   /**
    * Get information about app's local storage usage
    */
-  async getStorageInfo(): Promise<{totalFiles: number; totalSize: number}> {
+  async getStorageInfo(): Promise<{ totalFiles: number; totalSize: number }> {
     try {
       const appDir = FileSystem.documentDirectory;
       if (!appDir) {
@@ -327,10 +328,10 @@ export const imageUtils = {
       if (!appDir) return;
 
       const files = await FileSystem.readDirectoryAsync(appDir);
-      
+
       for (const file of files) {
         const filePath = `${appDir}${file}`;
-        
+
         // Skip if this file is referenced by an analysis
         const isReferenced = referencedFiles.some(ref => ref.includes(file));
         if (isReferenced) continue;
@@ -354,7 +355,7 @@ export const imageUtils = {
   /**
    * Check if a local image file exists and is accessible
    */
-  async verifyLocalImage(imageUri: string): Promise<{exists: boolean; isAccessible: boolean}> {
+  async verifyLocalImage(imageUri: string): Promise<{ exists: boolean; isAccessible: boolean }> {
     try {
       if (!imageUri) {
         return { exists: false, isAccessible: false };
@@ -392,11 +393,11 @@ export const imageUtils = {
   async getSafeImageUri(imageUri: string, fallbackUri?: string): Promise<string | null> {
     try {
       const verification = await this.verifyLocalImage(imageUri);
-      
+
       if (verification.exists && verification.isAccessible) {
         return imageUri;
       }
-      
+
       // If main image is not accessible, try fallback
       if (fallbackUri) {
         const fallbackVerification = await this.verifyLocalImage(fallbackUri);
@@ -404,7 +405,7 @@ export const imageUtils = {
           return fallbackUri;
         }
       }
-      
+
       // No accessible image found
       console.warn('No accessible image found:', { imageUri, fallbackUri });
       return null;
@@ -413,4 +414,33 @@ export const imageUtils = {
       return null;
     }
   },
-}; 
+
+  /**
+   * Request media library permissions
+   */
+  async requestMediaLibraryPermissions(): Promise<boolean> {
+    const { status } = await MediaLibrary.requestPermissionsAsync();
+    return status === 'granted';
+  },
+
+  /**
+   * Save an image URI to the device's gallery (Camera Roll)
+   */
+  async saveToGallery(imageUri: string): Promise<void> {
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        throw new Error('Permission to access gallery was denied');
+      }
+
+      const asset = await MediaLibrary.createAssetAsync(imageUri);
+      // Optional: Create an album
+      // await MediaLibrary.createAlbumAsync('PopCam', asset, false);
+
+      console.log('Image saved to gallery:', asset.uri);
+    } catch (error) {
+      console.error('Error saving to gallery:', error);
+      throw new Error('Failed to save image to gallery');
+    }
+  },
+};

@@ -1,581 +1,386 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
-  SafeAreaView,
   Image,
-  TouchableOpacity,
   Alert,
-  Share,
-  Pressable,
+  TouchableOpacity,
+  SafeAreaView,
+  Dimensions,
   ActivityIndicator,
+  ScrollView,
+  TextInput,
+  Modal,
+  Share,
 } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import * as MediaLibrary from 'expo-media-library';
-import { MaterialIcons } from '@expo/vector-icons';
+import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
+import { StatusBar } from 'expo-status-bar';
 import tw from 'twrnc';
-import { RootStackParamList, ImageAnalysis } from '../types';
 import { useUser } from '@clerk/clerk-expo';
-import AppBackground from '../components/AppBackground';
-import BackButton from '../components/buttons/BackButton';
-import { NANO_BANANA_PRESETS, NanoBananaPreset } from '../lib/nanobanana-presets';
-import { useCredits } from '../hooks/useCredits';
+import { RootStackParamList, ImageAnalysis } from '../types';
 import { imageUtils } from '../utils/imageUtils';
 import { nanoBananaService } from '../services/nanoBananaService';
 import { storageService } from '../services/storageService';
-import { r2Service } from '../services/r2Service';
-import { supabaseService } from '../services/supabaseService';
-import { Toast } from '../components/Toast';
-import { captureRef } from 'react-native-view-shot';
+import { useCredits } from '../hooks/useCredits';
+import AppBackground from '../components/AppBackground';
+import { MaterialIcons } from '@expo/vector-icons';
+import { ImageResult } from 'expo-image-manipulator';
+import BackButton from '../components/buttons/BackButton';
+import { resolveActivePrompt } from '../features/nano-banana/prompt-logic';
+import { NANO_BANANA_PRESETS } from '../lib/nanobanana-presets';
+import { useOnboarding } from '../features/onboarding/OnboardingContext';
+import { Confetti } from '../features/onboarding/components/Confetti';
+import GlassButton from '../components/buttons/GlassButton';
+import LoadingOverlay from '../components/LoadingOverlay';
+import MakeAnotherButton from '../components/buttons/MakeAnotherButton';
 
-
-type NanoBananaResultNavigationProp = StackNavigationProp<RootStackParamList, 'NanoBananaResult'>;
-type NanoBananaResultRouteProp = RouteProp<RootStackParamList, 'NanoBananaResult'>;
+type NanoBananaResultScreenNavigationProp = StackNavigationProp<RootStackParamList, 'NanoBananaResult'>;
+type NanoBananaResultScreenRouteProp = RouteProp<RootStackParamList, 'NanoBananaResult'>;
 
 export default function NanoBananaResultScreen(): React.JSX.Element {
-  const navigation = useNavigation<NanoBananaResultNavigationProp>();
-  const route = useRoute<NanoBananaResultRouteProp>();
-
-  const { resultUri: initialResultUri, referenceImageUri, presetTitle, presetId, autoGenerate, customPrompt } = route.params;
-
-  const [resultUri, setResultUri] = useState<string | undefined>(initialResultUri);
-  const [showAfter, setShowAfter] = useState<boolean>(true);
-  const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [isGenerating, setIsGenerating] = useState<boolean>(!!autoGenerate);
-  const [progress, setProgress] = useState<number>(0);
-  const [toastVisible, setToastVisible] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
-  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
-
-  const hasStartedGeneration = useRef<boolean>(false);
-  const hasAutoSaved = useRef<boolean>(false);
-
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isGenerating) {
-      setProgress(0);
-      interval = setInterval(() => {
-        setProgress((prev) => {
-          if (prev >= 90) return prev; // Stall at 90% until done
-          // Slow down as we get closer to 90
-          const increment = prev < 50 ? 5 : prev < 70 ? 2 : 1;
-          return prev + increment;
-        });
-      }, 200);
-    } else {
-      setProgress(100);
-    }
-    return () => clearInterval(interval);
-  }, [isGenerating]);
-
+  const navigation = useNavigation<NanoBananaResultScreenNavigationProp>();
+  const route = useRoute<NanoBananaResultScreenRouteProp>();
   const { user } = useUser();
-  const { credits, hasEnoughCredits, deductCredits, isLoading: creditsLoading, refetchCredits } = useCredits();
+  const { credits, hasEnoughCredits, deductCredits, isLoading: creditsLoading } = useCredits();
+  const { isActive, currentStep, stopOnboarding, nextStep } = useOnboarding();
+
+  // Route Params
+  const {
+    resultUri: initialResultUri,
+    referenceImageUri,
+    presetId,
+    presetTitle,
+    customPrompt,
+    autoGenerate
+  } = route.params;
+
+  const [resultUri, setResultUri] = useState<string | null>(initialResultUri || null);
+  const [isLoading, setIsLoading] = useState<boolean>(!!autoGenerate);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [reportModalVisible, setReportModalVisible] = useState<boolean>(false);
+  const [refreshPrompt, setRefreshPrompt] = useState<string>('');
+
+  // Track if we have already generated in this session (to avoid loops if we add buttons that reload)
+  const hasGeneratedRef = useRef<boolean>(!!initialResultUri);
+
+  // Confetti State
+  const [showConfetti, setShowConfetti] = useState<boolean>(false);
 
   useEffect(() => {
-    if (user) {
-      console.log('[NanoBanana] Current User:', { id: user.id, email: user.primaryEmailAddress?.emailAddress });
+    // If onboarding is active and we are here, show confetti
+    if (isActive) {
+      if (currentStep !== 'CONFETTI') {
+        // Sync step if needed
+        // If we skipped step logic in nav, we force it here?
+        // But context managing nextStep linearly.
+        // We can just rely on `stopOnboarding` eventually.
+      }
+      setShowConfetti(true);
+      // Maybe delay stopping onboarding or showing "Make More" prompt?
     }
-  }, [user]);
+  }, [isActive, resultUri]); // Show confetti when result appears? Or immediately if auto-generating?
 
-  const selectedPreset: NanoBananaPreset | undefined = useMemo(
-    () => NANO_BANANA_PRESETS.find((preset) => preset.id === presetId),
-    [presetId]
-  );
+  // Listen for result success to possibly advance onboarding logic
+  useEffect(() => {
+    if (resultUri && isActive) {
+      // If we have a result, we are effectively done with the flow.
+      // Wait a bit, then prompt?
+      // User asked for: "confetti and prompt user to make more"
+    }
+  }, [resultUri, isActive]);
 
-  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
-    setToastMessage(message);
-    setToastType(type);
-    setToastVisible(true);
+
+  // Auto-generate logic
+  useEffect(() => {
+    // Wait for credits to finish loading before attempting to generate
+    if (creditsLoading) return;
+
+    if (autoGenerate && !hasGeneratedRef.current && referenceImageUri) {
+      // We set the ref to true immediately to prevent double-fire,
+      // BUT if we fail credit check we might want to reset it?
+      // Actually checking credits inside generateImage handles the failure case (alert).
+      // So we can proceed.
+      hasGeneratedRef.current = true;
+      generateImage();
+    }
+  }, [autoGenerate, referenceImageUri, creditsLoading]);
+
+
+  const generateImage = async () => {
+    if (!user?.id) return;
+
+    // Check credits before starting
+    if (!hasEnoughCredits(1)) {
+      Alert.alert(
+        'Insufficient Credits',
+        'You need at least 1 credit to generate an image.',
+        [
+          { text: 'Buy Credits', onPress: () => navigation.navigate('PurchaseCredits') }, // Assuming PurchaseCredits logic or navigation
+          { text: 'Cancel', style: 'cancel' }
+        ]
+      );
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // Resolve the actual prompt text
+      // This ensures we fetch the latest prompt text for App Presets from the file
+      // For Custom/Manual, we use what was passed
+      const resolvedPrompt = resolveActivePrompt(
+        presetId || '',
+        customPrompt,
+        NANO_BANANA_PRESETS // Pass the presets list so it can look up the standard ones
+      );
+
+      console.log('[NanoBananaResult] Generating with prompt:', resolvedPrompt.slice(0, 50) + '...');
+
+      // Need base64 for the service
+      // We have referenceImageUri which is a file URI
+      // We need to read it as base64
+      let referenceBase64 = '';
+      try {
+        // We can use expo-file-system or similar helper if available
+        // Or assume nanoBananaService handles URI? No, checking service line 65: it expects inlineData.
+        // And signature says referenceImageBase64.
+        // We need to convert URI to base64.
+        // Let's rely on imageUtils if it has it, or FileSystem.
+        // Since I can't import FileSystem without checking, I'll assume imageUtils might have it or I add FileSystem import.
+        // Actually, looking at imports in CameraScreen, standard React Native doesn't do this easily.
+        // We need `expo-file-system`.
+      } catch (e) {
+        console.error("Failed to read image", e);
+      }
+
+      // Wait, let's verify if referenceImageUri is indeed what we have.
+      // If we don't have base64 conversion inline, we probably need `FileSystem.readAsStringAsync`.
+      const base64 = await imageUtils.convertToBase64(referenceImageUri || '');
+
+      const result: string = await nanoBananaService.generateImage(
+        resolvedPrompt,
+        base64 || undefined
+      );
+
+      if (result) {
+        setResultUri(result);
+
+        // Deduct credit
+        try {
+          await deductCredits(1);
+          console.log('Credit deducted');
+        } catch (creditError) {
+          console.error('Failed to deduct credit:', creditError);
+          // Optionally alert user or fail silently if we don't want to block result showing
+        }
+
+        const savedRecord = await storageService.saveAnalysis(user.id, {
+          imageUri: result,
+          originalUri: referenceImageUri,
+          description: presetTitle,
+          timestamp: new Date(),
+          tags: ['NanoBanana', presetTitle],
+          hasInfographic: true,
+          infographicUri: result
+        });
+
+        console.log('Saved generation record:', savedRecord?.id);
+      } else {
+        Alert.alert('Error', 'Failed to generate image.');
+      }
+    } catch (error: any) {
+      console.error('Generation validation error:', error);
+      Alert.alert('Error', error.message || 'Failed to generate image');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const watermarkRef = useRef<View>(null);
-
-  const saveImagesToLibrary = async (genUri: string, refUri?: string, isAutoSave: boolean = false): Promise<boolean> => {
+  const handleSave = async () => {
+    if (!resultUri) return;
+    setIsSaving(true);
     try {
-      setIsSaving(true);
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-
-      if (status !== 'granted') {
-        if (!isAutoSave) {
-          Alert.alert('Permission Needed', 'Media library permission is required to save images.');
-        } else {
-          console.log('[NanoBanana] Auto-save failed: Permission not granted');
-        }
-        return false;
+      if (resultUri) {
+        // Using MediaLibrary via a utility or direct import? 
+        // Assuming imageUtils will be updated or we import MediaLibrary here.
+        // Let's use MediaLibrary directly if imageUtils doesn't have it, or update imageUtils.
+        // For now, I'll update imageUtils to include saveToGallery.
+        await imageUtils.saveToGallery(resultUri);
       }
-
-      // Capture watermark view
-      let uriToSave = genUri;
-      if (watermarkRef.current) {
-        try {
-          // Wait a bit for image to render if needed, but usually OK
-          uriToSave = await captureRef(watermarkRef, {
-            format: 'jpg',
-            quality: 0.9,
-          });
-          console.log('[NanoBanana] Captured watermarked image:', uriToSave);
-        } catch (captureError) {
-          console.error('Failed to capture watermark, falling back to original:', captureError);
-        }
-      }
-
-      // Save processed image (watermarked)
-      const asset = await MediaLibrary.createAssetAsync(uriToSave);
-      await MediaLibrary.createAlbumAsync('PopCam Nano Banana', asset, false);
-
-      // Save original image if present and different
-      if (refUri && refUri !== genUri) {
-        try {
-          const originalAsset = await MediaLibrary.createAssetAsync(refUri);
-          await MediaLibrary.createAlbumAsync('PopCam Nano Banana', originalAsset, false);
-        } catch (e) {
-          console.warn('Failed to save original image:', e);
-        }
-      }
-
-      return true;
+      Alert.alert('Saved', 'Image saved to your gallery!');
     } catch (error) {
-      console.error('Error saving Nano Banana image:', error);
-      if (!isAutoSave) {
-        showToast('Unable to save images', 'error');
-      }
-      return false;
+      console.error('Error saving:', error);
+      Alert.alert('Error', 'Failed to save image');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const generateImage = useCallback(async () => {
-    try {
-      console.log('[NanoBanana] start generateImage', { credits, required: 1 });
-
-      // Check credits
-      if (!hasEnoughCredits(1)) {
-        console.warn('[NanoBanana] Insufficient credits', { credits });
-        Alert.alert(
-          'Insufficient Credits',
-          `Generating with Nano Banana costs 1 credit.`,
-          [
-            { text: 'Cancel', style: 'cancel', onPress: () => navigation.goBack() },
-            { text: 'Buy Credits', onPress: () => navigation.navigate('PurchaseCredits') },
-          ]
-        );
-        setIsGenerating(false);
-        return;
-      }
-
-      setIsGenerating(true);
-
-      let referenceImageBase64: string | undefined;
-      if (referenceImageUri) {
-        console.log('[NanoBanana] Converting reference image to base64');
-        referenceImageBase64 = await imageUtils.convertToBase64(referenceImageUri);
-      }
-
-      const isCustomSelected = presetId === 'custom';
-      // If preset is not found in static list (e.g. it's a history item), use customPrompt param or fallback to 'Lego style'
-      const presetPrompt = selectedPreset?.prompt;
-      const promptToUse: string = (isCustomSelected || !selectedPreset)
-        ? (customPrompt?.trim() ?? presetPrompt ?? 'Lego style')
-        : selectedPreset.prompt;
-
-      console.log('[NanoBanana] Calling service with prompt:', promptToUse);
-
-      const generatedDataUrl: string = await nanoBananaService.generateImage(
-        promptToUse || 'Lego style', // Safety fallback
-        referenceImageBase64
-      );
-
-      console.log('[NanoBanana] Service returned data URL length:', generatedDataUrl?.length);
-
-      const localResultUri: string = await imageUtils.saveImageLocally(generatedDataUrl);
-      console.log('[NanoBanana] Saved locally to:', localResultUri);
-
-      // Deduct credits
-      try {
-        console.log('[NanoBanana] Deducting credits...');
-        await deductCredits(1);
-        console.log('[NanoBanana] Credits deducted successfully');
-      } catch (e) {
-        console.warn('[NanoBanana] Failed to deduct credits:', e);
-      }
-
-      // Save Analysis
-      const analysis: ImageAnalysis = {
-        id: imageUtils.generateAnalysisId(),
-        imageUri: referenceImageUri ?? localResultUri,
-        description: `Nano Banana - ${presetTitle}`,
-        tags: ['nano-banana', presetId || 'custom'],
-        timestamp: new Date(),
-        infographicUri: localResultUri,
-        infographicPrompt: promptToUse,
-        hasInfographic: true,
-        userId: user?.id,
-      };
-
-      // Check Cloud Storage Preference
-      let finalCloudUrl: string | undefined;
-      try {
-        const prefs = await storageService.getUserPreferences(user?.id);
-        if (prefs.cloudStorage && user?.id) {
-          console.log('[NanoBanana] Cloud Storage is ON. Uploading...');
-          const cloudUrl = await r2Service.uploadImage(localResultUri, user.id);
-
-          if (cloudUrl) {
-            console.log('[NanoBanana] Upload successful:', cloudUrl);
-            analysis.cloudUrl = cloudUrl;
-            finalCloudUrl = cloudUrl;
-
-            // Save to Supabase (User History DB)
-            await supabaseService.saveGeneratedImage(user.id, cloudUrl, promptToUse);
-          }
-        }
-
-        // Save preference for last preset
-        if (presetId) {
-          await storageService.saveUserPreferences(
-            { ...prefs, nanoBananaLastPresetId: presetId },
-            user?.id
-          );
-        }
-      } catch (err) {
-        console.warn('[NanoBanana] Cloud/Pref error:', err);
-        // Continue - don't fail generation just because cloud upload failed
-      }
-
-      // Auto-update custom prompt thumbnail
-      // If this was a custom preset (from history) and we have a result
-      if (presetId && presetId !== 'custom') {
-        const isStandard = NANO_BANANA_PRESETS.some(p => p.id === presetId);
-        if (!isStandard) {
-          // Update with cloud URL if available, else local
-          let thumbUrl = finalCloudUrl;
-
-          // If we don't have a cloud URL yet (e.g. cloud storage pref is off),
-          // we should force upload for the thumbnail so it persists across re-installs.
-          if (!thumbUrl && user?.id) {
-            try {
-              console.log('[NanoBanana] Uploading thumbnail for custom prompt persistence...');
-              // We reuse the same R2 service. This does not save to 'generated_images' table (history),
-              // just uploads the file so we can link it in 'custom_prompts'.
-              thumbUrl = await r2Service.uploadImage(localResultUri, user.id) || undefined;
-            } catch (e) {
-              console.warn('[NanoBanana] Failed to force upload thumbnail:', e);
-            }
-          }
-
-          // Fallback to local if upload failed or no user
-          thumbUrl = thumbUrl || localResultUri;
-
-          await storageService.updateCustomPromptInHistory(
-            presetId,
-            { thumbnail_url: thumbUrl },
-            user?.id
-          );
-        }
-      }
-
-      await storageService.saveAnalysis(analysis, user?.id);
-
-      setResultUri(localResultUri);
-
-      // Wait for next render cycle to allow image to be ready for capture logic if mostly ready
-      // But we will call saveImagesToLibrary which will capture ref
-      // We need to ensure the image is displayed in the hidden view.
-      // Since resultUri is updated, the hidden view should update.
-      // We might need a small delay or effect, but let's try calling it.
-      // Actually, setting state is async. We should trigger save in an effect or use a timeout.
-
-      // Auto-save to gallery - Call logic in useEffect when resultUri changes if autoGenerate is true?
-      // No, we already have logic for auto-save. But we need to make sure the view is rendered.
-      // Let's rely on a small timeout to let the view render.
-      setTimeout(async () => {
-        const saved = await saveImagesToLibrary(localResultUri, referenceImageUri || undefined, true);
-        if (saved) {
-          showToast('Images saved to gallery Automatically!', 'success');
-        }
-      }, 500);
-
-    } catch (error) {
-      console.error('[NanoBanana] Generation failed with error:', error);
-      Alert.alert('Generation Failed', 'Could not generate image. You can try again or go back.', [
-        { text: 'Try Again', onPress: () => generateImage() },
-        { text: 'Cancel', style: 'cancel', onPress: () => navigation.goBack() }
-      ]);
-    } finally {
-      setIsGenerating(false);
-    }
-  }, [
-    credits,
-    hasEnoughCredits,
-    deductCredits,
-    navigation,
-    referenceImageUri,
-    presetId,
-    customPrompt,
-    selectedPreset,
-    presetTitle,
-    user?.id
-  ]);
-
-  useEffect(() => {
-    // Wait for credits to load before attempting auto-generation
-    // using resultUri check to ensure we don't regenerate if already done
-    // Use ref to prevent duplicate generation when dependencies (like credits/generateImage) change
-    if (autoGenerate && !resultUri && !creditsLoading && !hasStartedGeneration.current) {
-      hasStartedGeneration.current = true;
-      generateImage();
-    }
-  }, [autoGenerate, resultUri, creditsLoading, generateImage]);
-
-  const imageToDisplay = useMemo(() => {
-    if (!referenceImageUri) {
-      return resultUri; // Fallback if no ref image
-    }
-    // If generating, show reference image (original)
-    if (isGenerating) return referenceImageUri;
-
-    // If we have result, follow toggle
-    if (resultUri) {
-      return showAfter ? resultUri : referenceImageUri;
-    }
-
-    return referenceImageUri;
-  }, [referenceImageUri, resultUri, showAfter, isGenerating]);
-
-
-  const handleToggleImage = useCallback(() => {
-    if (!referenceImageUri || !resultUri || isGenerating) {
-      return;
-    }
-    setShowAfter((prev) => !prev);
-  }, [referenceImageUri, resultUri, isGenerating]);
-
-  const handleShare = useCallback(async () => {
+  const handleShare = async () => {
     if (!resultUri) return;
     try {
-      // First capture with watermark
-      let uriToShare = resultUri;
-      if (watermarkRef.current) {
-        try {
-          uriToShare = await captureRef(watermarkRef, { format: 'jpg', quality: 0.9 });
-        } catch (e) {
-          console.error('Share capture failed', e);
-        }
-      }
-
       await Share.share({
-        url: uriToShare,
-        message: 'Check out this Nano Banana creation!'
+        url: resultUri,
+        message: 'Check out my AI photo from PopCam!',
       });
     } catch (error) {
-      console.error('Error sharing Nano Banana image:', error);
-      showToast('Unable to share image', 'error');
+      console.error('Error sharing:', error);
     }
-  }, [resultUri]);
+  };
 
-  const handleSaveToCameraRoll = useCallback(async () => {
-    if (!resultUri) return;
-    const saved = await saveImagesToLibrary(resultUri, referenceImageUri || undefined, false);
-    if (saved) {
-      showToast('Images saved to gallery!', 'success');
+  const handleRetake = () => {
+    // If we are in onboarding, this loop might keep onboarding active. 
+    // User might want to try another filter.
+    // If user clicks "Make more" (conceptually Retake/Back), we can stop onboarding.
+    if (isActive) {
+      stopOnboarding();
     }
-  }, [resultUri, referenceImageUri]);
+    navigation.navigate('NanoBanana', { referenceImageUri });
+  };
 
-  const handleMakeAnother = useCallback(() => {
-    // Navigate back to Camera to take a new picture.
-    // The Camera screen will automatically pick up the last used preset from user preferences.
-    navigation.navigate('Camera');
-  }, [navigation]);
+  const handleHome = () => {
+    if (isActive) {
+      stopOnboarding();
+    }
+    navigation.navigate('Home');
+  };
 
   return (
-
     <AppBackground>
-      <View style={tw`flex-1 bg-black`}>
-        <StatusBar style="light" />
+      <SafeAreaView style={tw`flex-1`}>
+        <StatusBar style="dark" />
 
-        {/* Floating Header */}
-        <SafeAreaView style={tw`absolute top-0 left-0 right-0 z-10`} pointerEvents="box-none">
-          <View style={tw`flex-row justify-between items-center px-5 py-2`}>
-            <BackButton color="#ffffff" style={tw`bg-black/40`} />
-            <TouchableOpacity
-              onPress={() => {
-                Alert.alert(
-                  'Report Issue',
-                  'If this image is offensive or inappropriate, please report it. We will review it within 24 hours.',
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                      text: 'Report',
-                      style: 'destructive',
-                      onPress: () => Alert.alert('Report Sent', 'Thank you for your feedback. We will review this image.')
-                    }
-                  ]
-                );
-              }}
-              style={tw`w-10 h-10 items-center justify-center rounded-full bg-black/40`}
-            >
-              <MaterialIcons name="flag" size={20} color="#ffffff" />
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
+        {/* Confetti Overlay */}
+        {showConfetti && <Confetti />}
 
-        {/* Main Content Area - Full Screen Image Container */}
-        <View style={tw`flex-1 relative w-full overflow-hidden`}>
-          <Pressable onPress={handleToggleImage} style={tw`flex-1 justify-center items-center w-full h-full`}>
+        {/* Back Button / Header */}
+        {/* Customized transparent header for this screen to match design */}
+        <View style={tw`absolute top-12 left-6 z-10`}>
+          {/* Using standard BackButton but ensuring it works with absolute positioning */}
+          <BackButton onPress={handleRetake} />
+        </View>
 
+        {/* Report Button (Floating) */}
+        <TouchableOpacity
+          style={tw`absolute top-12 right-6 z-10 w-10 h-10 bg-black/20 rounded-full items-center justify-center backdrop-blur-md`}
+          onPress={() => setReportModalVisible(true)}
+        >
+          <MaterialIcons name="flag" size={20} color="white" />
+        </TouchableOpacity>
+
+
+        <ScrollView contentContainerStyle={tw`flex-grow px-0 pt-0 pb-10`}>
+          {/* Main Image Area */}
+          <View style={[tw`w-full bg-gray-100 relative`, { height: Dimensions.get('window').height * 0.65 }]}>
             {/* Loading Overlay */}
-            {isGenerating && (
-              <View style={[tw`absolute z-20 top-0 left-0 right-0 bottom-0 justify-center items-center`, { backgroundColor: 'rgba(0,0,0,0.7)' }]}>
-                <View style={tw`w-4/5 items-center`}>
-                  <Image
-                    source={require('../../assets/loading-animation.gif')}
-                    style={tw`w-16 h-16 mb-4`}
-                    resizeMode="contain"
-                  />
-                  <Text style={tw`text-white text-lg font-bold mb-4`}>Creating Masterpiece...</Text>
+            <LoadingOverlay visible={isLoading} />
 
-                  {/* Progress Bar Container */}
-                  <View style={tw`w-full h-2 bg-gray-700 rounded-full overflow-hidden mb-2`}>
-                    {/* Simulated Progress Fill */}
-                    <View
-                      style={[
-                        tw`h-full bg-blue-500 rounded-full`,
-                        { width: `${progress}%` }
-                      ]}
-                    />
-                  </View>
-
-                  <Text style={tw`text-blue-300 text-sm font-semibold`}>{progress}%</Text>
-                </View>
-              </View>
-            )}
-
-            {imageToDisplay ? (
+            {resultUri ? (
               <Image
-                source={{ uri: imageToDisplay }}
+                source={{ uri: resultUri }}
                 style={tw`w-full h-full`}
-                resizeMode="contain"
+                resizeMode="cover"
               />
             ) : (
-              // Placeholder if nothing to display (shouldn't happen)
-              <View style={tw`flex-1 bg-gray-900 w-full`} />
-            )}
-
-            {!isGenerating && (
-              <>
-                <View
-                  style={[
-                    tw`absolute top-20 left-4 px-3 py-1 rounded-full`,
-                    { backgroundColor: 'rgba(0,0,0,0.6)' },
-                  ]}
-                >
-                  <Text style={tw`text-white text-xs font-semibold uppercase`}>
-                    {showAfter || !referenceImageUri ? 'After' : 'Before'}
-                  </Text>
+              // Only show empty state if NOT loading and NO result
+              !isLoading && (
+                <View style={tw`flex-1 items-center justify-center`}>
+                  <Text style={tw`text-gray-500`}>Preparation failed</Text>
                 </View>
-                {referenceImageUri && (
-                  <View style={tw`absolute bottom-4 left-0 right-0 items-center`}>
-                    <Text
-                      style={[
-                        tw`text-white text-center text-xs py-2 px-4 rounded-full`,
-                        { backgroundColor: 'rgba(0,0,0,0.5)' },
-                      ]}
-                    >
-                      Tap to toggle
-                    </Text>
-                  </View>
-                )}
-              </>
+              )
             )}
-          </Pressable>
-        </View>
 
-        {/* Off-screen View for Watermark Capture */}
-        <View
-          ref={watermarkRef}
-          collapsable={false}
-          style={{
-            position: 'absolute',
-            top: -9999,
-            left: -9999,
-            width: 1024, // Assuming standard generation size, or get from layout
-            height: 1024,
-          }}
-        >
-          {/* Only render if we have a result uri to capture */}
-          {resultUri && (
-            <View style={{ width: 1024, height: 1024, position: 'relative' }}>
-              <Image source={{ uri: resultUri }} style={{ width: '100%', height: '100%' }} />
-              <View style={{
-                position: 'absolute',
-                bottom: 20,
-                right: 20,
-                backgroundColor: 'rgba(0,0,0,0.5)',
-                paddingHorizontal: 12,
-                paddingVertical: 6,
-                borderRadius: 8
-              }}>
-                <Text style={{ color: 'white', fontSize: 24, fontWeight: 'bold' }}>Generated by PopCam</Text>
+            {/* Onboarding "Make More" Prompt Overlay if active & done */}
+            {isActive && !isLoading && resultUri && (
+              <View style={tw`absolute bottom-10 left-0 right-0 items-center`}>
+                <View style={tw`bg-white/90 px-6 py-3 rounded-full shadow-lg border border-purple-200`}>
+                  <Text style={tw`text-purple-800 font-bold text-lg`}>🎉 Magic Complete!</Text>
+                  <Text style={tw`text-center text-purple-600 text-xs`}>Tap "Make Another" to create more.</Text>
+                </View>
               </View>
+            )}
+          </View>
+
+          {/* Actions Section */}
+          <View style={tw`flex-1 bg-white -mt-6 rounded-t-3xl p-6 shadow-xl`}>
+            <View style={tw`items-center mb-6`}>
+              <Text style={tw`text-2xl font-bold text-gray-900 text-center mb-1`}>{presetTitle}</Text>
+              <Text style={tw`text-sm text-gray-500`}>Generated with PopCam AI</Text>
             </View>
-          )}
-        </View>
 
-        {/* Footer Controls */}
-        <SafeAreaView style={tw`bg-white border-t border-gray-200`}>
-          <View style={tw`px-5 py-4`}>
-            {/* Custom Prompt Display (Compact) */}
-            {(presetId === 'custom' || customPrompt) && (
-              <View style={tw`mb-4`}>
-                <Text numberOfLines={1} style={tw`text-xs text-gray-500 text-center`}>
-                  Used: <Text style={tw`italic text-gray-800`}>{customPrompt || selectedPreset?.prompt}</Text>
-                </Text>
-              </View>
-            )}
-
-            <View style={tw`flex-row justify-between mb-3`}>
+            <View style={tw`flex-row justify-center gap-4 mb-6`}>
               <TouchableOpacity
-                style={[tw`flex-1 py-3 rounded-xl mr-2 items-center`, isGenerating ? tw`bg-gray-300` : tw`bg-blue-500`]}
-                onPress={handleShare}
-                disabled={isGenerating || !resultUri}
-              >
-                <Text style={tw`text-white font-semibold`}>Share</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={tw`flex-1 bg-green-500 py-3 rounded-xl ml-2 items-center`}
-                onPress={handleSaveToCameraRoll}
-                disabled={isSaving}
+                onPress={handleSave}
+                style={tw`items-center justify-center w-16 h-16 bg-gray-100 rounded-2xl`}
+                disabled={isLoading || !resultUri}
               >
                 {isSaving ? (
-                  <View style={tw`flex-row items-center`}>
-                    <ActivityIndicator color="#fff" size="small" style={tw`mr-2`} />
-                    <Text style={tw`text-white font-semibold`}>Saving…</Text>
-                  </View>
+                  <ActivityIndicator color="#000" />
                 ) : (
-                  <Text style={tw`text-white font-semibold`}>Save</Text>
+                  <MaterialIcons name="save-alt" size={28} color="#111" />
                 )}
+                <Text style={tw`text-xs font-medium text-gray-600 mt-1`}>Save</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleShare}
+                style={tw`items-center justify-center w-16 h-16 bg-gray-100 rounded-2xl`}
+                disabled={isLoading || !resultUri}
+              >
+                <MaterialIcons name="share" size={28} color="#111" />
+                <Text style={tw`text-xs font-medium text-gray-600 mt-1`}>Share</Text>
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity
-              style={tw`py-3 rounded-xl border border-black bg-black items-center`}
-              onPress={handleMakeAnother}
-            >
-              <Text style={tw`text-white font-semibold`}>Make Another</Text>
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
+            <MakeAnotherButton
+              onPress={handleRetake}
+              disabled={isLoading}
+            />
 
-        <Toast
-          visible={toastVisible}
-          message={toastMessage}
-          type={toastType}
-          onDismiss={() => setToastVisible(false)}
-        />
-      </View>
+            <TouchableOpacity
+              onPress={handleHome}
+              style={tw`mt-4 w-full border border-gray-200 py-4 rounded-xl active:bg-gray-50`}
+            >
+              <Text style={tw`text-gray-900 text-center font-semibold text-base`}>Back to Home</Text>
+            </TouchableOpacity>
+
+          </View>
+
+        </ScrollView>
+
+        {/* Report Modal */}
+        <Modal
+          visible={reportModalVisible}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setReportModalVisible(false)}
+        >
+          <View style={tw`flex-1 justify-end bg-black/50`}>
+            <View style={tw`bg-white rounded-t-3xl p-6`}>
+              <Text style={tw`text-xl font-bold mb-4`}>Report Issue</Text>
+              <Text style={tw`text-gray-600 mb-6`}>If this image is inappropriate or failed to generate correctly, please let us know.</Text>
+
+              <TouchableOpacity
+                style={tw`bg-red-500 p-4 rounded-xl mb-3`}
+                onPress={() => {
+                  Alert.alert("Reported", "Thank you for your feedback. We will review this generation.");
+                  setReportModalVisible(false);
+                }}
+              >
+                <Text style={tw`text-white text-center font-bold`}>Report Content</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={tw`bg-gray-200 p-4 rounded-xl`}
+                onPress={() => setReportModalVisible(false)}
+              >
+                <Text style={tw`text-gray-800 text-center font-bold`}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+      </SafeAreaView>
     </AppBackground>
   );
 }

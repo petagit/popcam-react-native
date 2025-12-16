@@ -1,7 +1,7 @@
 import React from 'react';
 import { TouchableOpacity, ViewStyle } from 'react-native';
 import { BlurView } from 'expo-blur';
-import { sharedStyles, spacing } from '../styles/sharedStyles';
+import { sharedStyles, spacing } from '../../styles/sharedStyles';
 
 export interface GlassButtonProps {
   size?: number;
@@ -9,6 +9,7 @@ export interface GlassButtonProps {
   style?: ViewStyle | ViewStyle[];
   intensity?: number;
   children?: React.ReactNode;
+  tint?: 'light' | 'dark' | 'default';
 }
 
 export const GlassButton: React.FC<GlassButtonProps> = ({
@@ -17,10 +18,11 @@ export const GlassButton: React.FC<GlassButtonProps> = ({
   style,
   intensity = 30,
   children,
+  tint = 'light',
 }) => {
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.85} style={style}>
-      <BlurView intensity={intensity} tint="light" style={[
+      <BlurView intensity={intensity} tint={tint as any} style={[
         sharedStyles.glassCircleBase,
         { width: size, height: size, borderRadius: size / 2, backgroundColor: 'transparent' },
       ]}>

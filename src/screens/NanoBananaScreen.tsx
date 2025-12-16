@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
   Share,
   Switch,
   Linking,
+  LayoutRectangle,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
@@ -34,9 +35,12 @@ import { PromptHistoryModal } from '../features/nano-banana/custom-prompts/Promp
 import { CustomPromptPickerModal } from '../features/nano-banana/custom-prompts/CustomPromptPickerModal';
 import { r2Service } from '../services/r2Service';
 import { NanoBananaGrid, GridItem } from '../features/nano-banana/NanoBananaGrid';
-import GlassButton from '../components/GlassButton';
+import GlassButton from '../components/buttons/GlassButton';
 import CreditsButton from '../components/buttons/CreditsButton';
 import BackButton from '../components/buttons/BackButton';
+import { resolvePromptConfig, PromptSource } from '../features/nano-banana/prompt-logic';
+import { createAndUploadThumbnail } from '../features/nano-banana/thumbnail-logic';
+import { useOnboarding } from '../features/onboarding/OnboardingContext';
 
 type NanoBananaScreenNavigationProp = StackNavigationProp<RootStackParamList, 'NanoBanana'>;
 type NanoBananaScreenRouteProp = RouteProp<RootStackParamList, 'NanoBanana'>;
@@ -46,6 +50,7 @@ export default function NanoBananaScreen(): React.JSX.Element {
   const route = useRoute<NanoBananaScreenRouteProp>();
   const { credits, isLoading: creditsLoading, error: creditsError } = useCredits();
   const { user } = useUser();
+  const { isActive, currentStep, registerTarget, nextStep, deregisterTarget } = useOnboarding();
 
   const { promptHistory, loadPromptHistory, savePrompt, deletePrompt, updatePrompt } = useCustomPrompts();
 
@@ -68,10 +73,35 @@ export default function NanoBananaScreen(): React.JSX.Element {
   const [isLoadingPresets, setIsLoadingPresets] = useState<boolean>(true);
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
 
+  // Refs for onboarding targets
+  const firstFilterRef = useRef<View>(null);
+  const uploadButtonRef = useRef<View>(null);
+
+  // Onboarding effect for registering targets
+  useEffect(() => {
+    if (!isActive) return;
+
+    const measureAndRegister = (ref: React.RefObject<any>, step: 'PICK_FILTER' | 'TAKE_PICTURE') => {
+      if (currentStep === step && ref.current) {
+        ref.current.measureInWindow((x: number, y: number, width: number, height: number) => {
+          if (width > 0 && height > 0) {
+            registerTarget(step, { x, y, width, height });
+          }
+        });
+      }
+    };
+
+    // Need a slight delay or retry because grid might be rendering or layout shifting
+    const t = setTimeout(() => {
+      measureAndRegister(firstFilterRef, 'PICK_FILTER');
+      measureAndRegister(uploadButtonRef, 'TAKE_PICTURE');
+    }, 500);
+
+    return () => clearTimeout(t);
+  }, [isActive, currentStep, isLoadingPresets]); // depend on loadingPresets so we retry when grid appears
+
   const loadLocalPresets = useCallback(async () => {
     setIsLoadingPresets(true);
-    // We prioritize promptHistory over localPresets for the grid now.
-    // Keeping localPresets load for legacy support or migration if needed, but grid will use promptHistory.
     if (user?.id) {
       try {
         const presets = await storageService.getLocalPresets(user.id);
@@ -90,14 +120,9 @@ export default function NanoBananaScreen(): React.JSX.Element {
     loadLocalPresets();
   }, [loadLocalPresets]);
 
-
-
-
   const gridItems: GridItem[] = useMemo(() => {
     const presetItems: GridItem[] = NANO_BANANA_PRESETS.map((p: NanoBananaPreset) => ({ type: 'preset', preset: p }));
-    // const localItems: GridItem[] = localPresets.map((p: LocalPreset) => ({ type: 'local', preset: p }));
-
-    // Use promptHistory from DB/Storage
+    // Using promptHistory instead of localPresets
     const customItems: GridItem[] = promptHistory.map(p => ({
       type: 'history_custom',
       preset: p
@@ -108,7 +133,7 @@ export default function NanoBananaScreen(): React.JSX.Element {
 
   const screenWidth: number = Dimensions.get('window').width;
   const screenHeight: number = Dimensions.get('window').height;
-  const horizontalPadding: number = 32; // px-4 left+right in container
+  const horizontalPadding: number = 32;
   const interItemGap: number = 6;
   const columns: number = 3;
   const tileSize: number = Math.floor((screenWidth - horizontalPadding - interItemGap * (columns - 1)) / columns);
@@ -131,7 +156,6 @@ export default function NanoBananaScreen(): React.JSX.Element {
     }
   }, [route.params?.presetId]);
 
-  // Load last used preset and custom prompt settings if none provided via route
   useEffect(() => {
     const loadPreferredPreset = async (): Promise<void> => {
       try {
@@ -142,8 +166,6 @@ export default function NanoBananaScreen(): React.JSX.Element {
 
           if (preferredId) {
             setSelectedPresetId(preferredId);
-
-            // If custom was selected, enable the switch and restore text
             if (preferredId === 'custom') {
               setIsCustomPromptEnabled(true);
               if (customText) {
@@ -161,75 +183,79 @@ export default function NanoBananaScreen(): React.JSX.Element {
     loadPreferredPreset();
   }, [route.params?.presetId, user?.id]);
 
-  const handleSelectPreset = (presetId: string): void => {
-    setSelectedPresetId(presetId);
-  };
-
-  const openPreview = (preset: NanoBananaPreset): void => {
-    setPreviewPreset(preset);
-    setIsPreviewVisible(true);
-  };
-
-  const closePreview = (): void => {
-    setIsPreviewVisible(false);
-    setPreviewPreset(null);
-  };
-
-
-
-  const openCustomPrompt = (): void => {
-    setSelectedPresetId('custom');
-    setIsPromptModalVisible(true);
-  };
-
-
-  const isPickerMode = route.params?.mode === 'picker';
 
   const goToConfirm = useCallback(async (presetIdToUse: string, presetTitleToUse: string, customPromptToUse?: string): Promise<void> => {
-    // Fix: Prioritize the passed `customPromptToUse` (from history item or "Use Prompt" button)
-    // over the current input state `customPrompt`.
-    // Only use the input state if no specific prompt was passed and the custom mode is enabled.
-    const finalCustomPrompt = customPromptToUse ?? (isCustomPromptEnabled ? customPrompt : undefined);
+    let source: PromptSource;
 
-    // We used to override presetId to 'custom' if the switch was on, but that prevented selecting grid items.
-    // Now we respect the passed presetIdToUse (which comes from the clicked tile).
-    const finalPresetId = presetIdToUse;
-    const finalPresetTitle = presetTitleToUse;
+    if (customPromptToUse !== undefined) {
+      if (presetIdToUse === 'custom') {
+        source = { type: 'MANUAL_INPUT', text: customPromptToUse };
+      } else {
+        source = {
+          type: 'USER_PRESET',
+          preset: { id: presetIdToUse, prompt_text: customPromptToUse, title: presetTitleToUse }
+        };
+      }
+    } else {
+      source = {
+        type: 'APP_PRESET',
+        preset: { id: presetIdToUse, title: presetTitleToUse } as any
+      };
+    }
 
-    // Save preference in BOTH modes so "Make Another" (which goes to Camera) picks up the latest choice
+    const config = resolvePromptConfig(source);
+
     if (user?.id) {
       try {
-        await storageService.saveUserPreferences({
-          nanoBananaLastPresetId: finalPresetId,
-          nanoBananaCustomPromptText: finalCustomPrompt,
-        }, user.id);
+        const prefsToSave: any = { nanoBananaLastPresetId: config.presetId };
+        if (config.customPromptParam) {
+          prefsToSave.nanoBananaCustomPromptText = config.customPromptParam;
+        }
+        await storageService.saveUserPreferences(prefsToSave, user.id);
       } catch (error) {
         console.warn('Failed to save preset preference', error);
       }
     }
 
-    if (isPickerMode) {
+    if (route.params?.mode === 'picker') {
       navigation.goBack();
       return;
     }
 
     if (!referenceImageUri) {
+      // If in onboarding and we need to take picture, let's not block completely but alert user.
+      // Actually, onboarding step "TAKE_PICTURE" is strictly for the button highlight.
+      // The user must click the button to get the URI. 
+      // If they click a preset without URI, we alert them.
+      // If they have URI, proceed.
       Alert.alert('Photo Required', 'Please upload or capture a photo before continuing.');
       return;
     }
 
+    if (isActive && currentStep === 'TAKE_PICTURE') {
+      nextStep(); // Move to CONFETTI step conceptually, or wait until Result screen loads
+    }
+
     navigation.replace('NanoBananaResult', {
-      resultUri: '', // Will be generated
+      resultUri: '',
       referenceImageUri,
-      presetId: finalPresetId,
-      presetTitle: finalPresetTitle,
-      customPrompt: finalCustomPrompt,
+      presetId: config.presetId,
+      presetTitle: config.presetTitle,
+      customPrompt: config.customPromptParam,
       autoGenerate: true,
     });
-  }, [navigation, referenceImageUri, isPickerMode, isCustomPromptEnabled, customPrompt, user?.id]);
+  }, [navigation, referenceImageUri, route.params?.mode, user?.id, isActive, currentStep, nextStep]);
 
   const handlePickReferenceImage = async (): Promise<void> => {
+    // If onboarding, clicking this fulfills the action effectively, or starts the process.
+    // If we want to move step only after they actually select, we do it in success block.
+    // However, the prompt is "take a picture...". 
     try {
+      if (isActive && currentStep === 'TAKE_PICTURE') {
+        // We can advance step here? Or wait for image?
+        // Let's wait for image.
+      }
+
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
@@ -239,6 +265,49 @@ export default function NanoBananaScreen(): React.JSX.Element {
       if (!result.canceled && result.assets[0]?.uri) {
         const localUri = await imageUtils.copyImageToAppStorage(result.assets[0].uri);
         setReferenceImageUri(localUri);
+
+        // If in onboarding TAKE_PICTURE step, now we have the picture.
+        // But users usually need to click "Generate" or similar? 
+        // Wait, standard flow: Select Preset -> (Auto triggers if Ref Image exists? No, need to click something?)
+        // Ah, logic: 
+        // "if (shouldAutoGenerate && selectedPreset && referenceImageUri) { goToConfirm... }"
+        // Wait, currently if you select preset, it sets selected ID.
+        // If you have ref image, does clicking preset immediately go?
+        // `onSelect` calls `goToConfirm`. `goToConfirm` checks `referenceImageUri`.
+        // If `referenceImageUri` is missing, it alerts.
+        // So flow is: 1. Upload Ref. 2. Select Preset. OR 1. Select Preset (fails) -> Upload Ref -> Click Preset again?
+        // My Onboarding flow is: 1. Nano Button. 2. Filter (Preset). 3. Camera (Ref).
+        // If user clicks Filter first (Step 2), it alerts "Photo Required".
+        // That might be confusing for onboarding.
+        // If step 2 is "Pick Filter", user picks filter. It alerts "Photo Required".
+        // Then Step 3 highlights "Upload". User uploads.
+        // Then user needs to click Filter AGAIN to generate?
+        // OR `goToConfirm` should effectively select it but wait for image?
+        // `handleSelectPreset` sets ID.
+        // `onSelect` in Grid calls `goToConfirm`.
+        // Let's modify `onSelect` slightly or `goToConfirm` to handle the flow better?
+        // If we just want to highlight, it's fine.
+        // Ideally: User picks filter (highlighted). We define `selectedPresetId`. "Photo Required" alert might be suppressed or changed to "Now upload photo".
+        // Then Step 3 highlights Upload.
+        // If user uploads, then we need to Trigger generation?
+        // I'll add logic to auto-trigger if onboarding active and both present?
+        // Or relying on standard behavior: user uploads, then likely clicks filter again?
+        // Let's try to Auto-Generate if we just uploaded and have a selected preset.
+
+        // This effect exists:
+        // useEffect(() => { if (shouldAutoGenerate...) ... }, ...)
+        // We can set `shouldAutoGenerate` to true when upload finishes if we have a preset?
+        if (selectedPresetId) {
+          setShouldAutoGenerate(true); // This matches existing logical pattern
+        }
+
+        if (isActive && currentStep === 'TAKE_PICTURE') {
+          // We don't call nextStep() here because next step is "CONFETTI" (Result screen).
+          // Transitioning to Result screen will mount that screen which should handle the confetti.
+          // But we need to make sure we don't get stuck in TAKE_PICTURE on this screen if for some reason we stay here.
+          // Actually, `goToConfirm` calls `replace('NanoBananaResult')`.
+          // So if auto-generate triggers, we leave this screen.
+        }
       }
     } catch (error) {
       console.error('Error selecting reference image:', error);
@@ -276,11 +345,22 @@ export default function NanoBananaScreen(): React.JSX.Element {
   }, [route.params?.autoGenerate, navigation]);
 
   useEffect(() => {
-    if (shouldAutoGenerate && selectedPreset && referenceImageUri) {
+    if (shouldAutoGenerate && selectedPresetId && referenceImageUri) {
       setShouldAutoGenerate(false);
-      goToConfirm(selectedPreset.id, selectedPreset.title);
+      // Need to find title if it's a preset
+      const preset = NANO_BANANA_PRESETS.find(p => p.id === selectedPresetId);
+      const custom = promptHistory.find(p => p.id === selectedPresetId);
+
+      if (preset) {
+        goToConfirm(preset.id, preset.title);
+      } else if (custom) {
+        goToConfirm(custom.id, custom.title || 'Custom', custom.prompt_text);
+      } else if (selectedPresetId === 'custom') {
+        goToConfirm('custom', 'Custom', customPrompt);
+      }
     }
-  }, [shouldAutoGenerate, selectedPreset, referenceImageUri, goToConfirm]);
+  }, [shouldAutoGenerate, selectedPresetId, referenceImageUri, goToConfirm, promptHistory, customPrompt]);
+
 
   const handleCustomPresetLongPress = (preset: { id: string; prompt_text: string; title?: string; thumbnail_url?: string }) => {
     Alert.alert(
@@ -308,7 +388,7 @@ export default function NanoBananaScreen(): React.JSX.Element {
   const handleCustomPresetDelete = (preset: { id: string; prompt_text: string }) => {
     Alert.alert(
       'Delete Preset',
-      'Are you sure you want to delete this custom, preset?',
+      'Are you sure you want to delete this custom preset?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -334,16 +414,11 @@ export default function NanoBananaScreen(): React.JSX.Element {
       });
 
       if (!result.canceled && result.assets[0]?.uri && user?.id) {
-        // Show loading state? 
         Alert.alert('Uploading', 'Please wait while the thumbnail uploads...');
 
-        const uploadedKey = await r2Service.uploadImage(result.assets[0].uri, user.id);
+        const uploadedKey = await createAndUploadThumbnail(result.assets[0].uri, user.id);
+
         if (uploadedKey) {
-          // Update
-          // Note: We need to know the current title/prompt to keep them? 
-          // Or `updatePrompt` merges? `updatePrompt` does merge based on `storageService.ts` code I saw (fallback local logic does merge object).
-          // But let's check `updatePrompt` implementation in `useCustomPrompts`.
-          // It calls `storageService.updateCustomPromptInHistory` which merges fields locally and usually patches remotely.
           await updatePrompt(presetId, { thumbnail_url: uploadedKey });
           Alert.alert('Success', 'Thumbnail updated!');
         } else {
@@ -378,9 +453,17 @@ export default function NanoBananaScreen(): React.JSX.Element {
     );
   };
 
-  // GridItem type is now imported/defined in NanoBananaGrid but locally needed for internal logic if we didn't export it fully or used distinct typing.
-  // Actually, let's update local imports to match or just pass data.
-  // We can't easily export/import type from the file we just created inside replace_file_content without separate step, but assuming we can import it.
+  const isPickerMode = route.params?.mode === 'picker';
+
+  const openPreview = (preset: NanoBananaPreset) => {
+    setPreviewPreset(preset);
+    setIsPreviewVisible(true);
+  };
+
+  const closePreview = () => {
+    setIsPreviewVisible(false);
+    setPreviewPreset(null);
+  };
 
   return (
     <AppBackground>
@@ -389,27 +472,28 @@ export default function NanoBananaScreen(): React.JSX.Element {
 
         <View style={tw`flex-row items-center justify-between px-5 py-4 border-b border-gray-200`}>
           <BackButton />
-          <Text style={tw`text-lg font-semibold text-gray-800`}>Nano Banana Lab</Text>
-          <TouchableOpacity onPress={() => setIsEditMode(!isEditMode)} style={tw`py-2 px-3`}>
-            <Text style={tw`text-base text-gray-900 font-semibold`}>{isEditMode ? 'Done' : 'Edit'}</Text>
-          </TouchableOpacity>
+          <Text style={tw`text-lg font-semibold text-gray-800`}>Pick Your AI Filter</Text>
+          <View style={tw`flex-row items-center`}>
+            <CreditsButton variant="minimal" />
+            <TouchableOpacity onPress={() => setIsEditMode(!isEditMode)} style={tw`py-2 px-3 ml-2`}>
+              <Text style={tw`text-base text-gray-900 font-semibold`}>{isEditMode ? 'Done' : 'Edit'}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <ScrollView style={tw`flex-1`} contentContainerStyle={tw`pb-28 px-4 pt-4`}>
-          <View style={tw`mb-4 bg-white rounded-2xl p-4 shadow-sm`}>
-            <View style={tw`flex-row justify-between items-center mb-2`}>
-              <Text style={tw`text-xl font-bold text-gray-900`}>Pick Your AI Filter</Text>
-              <CreditsButton variant="minimal" />
+          {(referenceImageUri || creditsError) && (
+            <View style={tw`mb-4 bg-white rounded-2xl p-4 shadow-sm`}>
+              {referenceImageUri && (
+                <Text style={tw`text-xs text-blue-600 font-semibold`}>
+                  Photo loaded from the camera — choose a filter below.
+                </Text>
+              )}
+              {creditsError && (
+                <Text style={tw`text-xs text-red-500 mt-1`}>{creditsError}</Text>
+              )}
             </View>
-            {referenceImageUri && (
-              <Text style={tw`mt-1 text-xs text-blue-600 font-semibold`}>
-                Photo loaded from the camera — choose a filter below.
-              </Text>
-            )}
-            {creditsError && (
-              <Text style={tw`text-xs text-red-500 mt-1`}>{creditsError}</Text>
-            )}
-          </View>
+          )}
 
           {/* Showcase Button */}
           <TouchableOpacity
@@ -449,35 +533,85 @@ export default function NanoBananaScreen(): React.JSX.Element {
               ))}
             </View>
           ) : (
-            <NanoBananaGrid
-              items={gridItems}
-              selectedId={selectedPresetId}
-              columns={columns}
-              tileSize={tileSize}
-              interItemGap={interItemGap}
-              isManageMode={isEditMode}
-              onOpenCustomPicker={() => {
-                setEditingPresetId(null);
-                setCustomPrompt('');
-                openCustomPrompt();
-              }}
-              onSelect={(item) => {
-                if (item.type === 'preset') {
-                  goToConfirm(item.preset.id, item.preset.title);
-                } else if (item.type === 'history_custom') {
-                  goToConfirm(item.preset.id, item.preset.title || 'Custom Preset', item.preset.prompt_text);
-                }
-              }}
-              onLongPress={(item) => {
-                if (item.type === 'preset') {
-                  openPreview(item.preset);
-                } else if (item.type === 'history_custom') {
-                  handleCustomPresetLongPress(item.preset);
-                }
-              }}
-              onEditCustom={(preset) => handleEditCustomPreset(preset)}
-              onDeleteCustom={(preset) => handleCustomPresetDelete(preset)}
-            />
+            // We need to capture Ref of the FIRST item if possible for onboarding.
+            // NanoBananaGrid renders items. We can pass a ref for the first item?
+            // Or verify if we can wrap the grid or first item.
+            // NanoBananaGrid maps standard params.
+            // A cheat: Wrap NanoBananaGrid in a View, but we need specific item coordinates.
+            // Standard way: Modify NanoBananaGrid to accept `onLayoutFirstItem`.
+            // Alternative: We can put a transparent view over the first item position if we know the layout?
+            // Since layout is calculated (tileSize), we can guess?
+            // Better: Let's modify NanoBananaGrid to accept a Ref for the first item or 'onLayout' for it.
+            // But I can't modify NanoBananaGrid easily in this single file edit unless I inline it or replace it.
+            // Wait, I can wrap the first item in the grid items logic?
+            // gridItems is an array of data.
+            // I'll make a specialized View that wraps the Grid and puts a "target" registration View on top of the first item's estimated position?
+            // `tileSize` is known. `interItemGap` is known. First item is at 0,0 relative to Grid container.
+            // So I can just measure Grid container and add offset?
+            // Yes!
+            <View
+              collapsable={false}
+              ref={firstFilterRef} // Actually ref the container, and since first item is top-left...
+            // But wait, there's `CustomPromptSection` above.
+            // If I ref this View wrapping grid, `measureInWindow` gives top-left of Grid.
+            // First item is at (0,0) of this View.
+            // Size is `tileSize` x `tileSize`.
+            // So I can hack the measurement: measure View, use x,y and tileSize for width/height.
+            // But `firstFilterRef` is View.
+            >
+              {/** 
+                  * Hack for Onboarding Target Registration:
+                  * We use a dummy view positioned absolutely over the first item slot to capture its layout perfectly?
+                  * Or just use the container and math.
+                  * Let's use the container ref `firstFilterRef` and in the effect use `tileSize`.
+                  * 
+                  * Wait, `measureAndRegister` takes a ref and registers its WHOLE size.
+                  * I need to register just the tile size.
+                  * I will modify the effect to handle `firstFilterRef` specially or using a specific sub-view.
+                  * 
+                  * Let's put a View with `width: tileSize, height: tileSize` and `position: absolute` at 0,0.
+                  * Give THIS view the ref.
+                  */}
+              <View
+                pointerEvents="none"
+                style={{ position: 'absolute', top: 0, left: 0, width: tileSize, height: tileSize, zIndex: -1 }}
+                ref={firstFilterRef}
+              />
+
+              <NanoBananaGrid
+                items={gridItems}
+                selectedId={selectedPresetId}
+                columns={columns}
+                tileSize={tileSize}
+                interItemGap={interItemGap}
+                isManageMode={isEditMode}
+                onOpenCustomPicker={() => {
+                  setEditingPresetId(null);
+                  setCustomPrompt('');
+                  setIsPromptModalVisible(true);
+                }}
+                onSelect={(item) => {
+                  // Logic for Onboarding Step 2
+                  if (isActive && currentStep === 'PICK_FILTER') {
+                    nextStep();
+                  }
+                  if (item.type === 'preset') {
+                    goToConfirm(item.preset.id, item.preset.title);
+                  } else if (item.type === 'history_custom') {
+                    goToConfirm(item.preset.id, item.preset.title || 'Custom Preset', item.preset.prompt_text);
+                  }
+                }}
+                onLongPress={(item) => {
+                  if (item.type === 'preset') {
+                    openPreview(item.preset);
+                  } else if (item.type === 'history_custom') {
+                    handleCustomPresetLongPress(item.preset);
+                  }
+                }}
+                onEditCustom={(preset) => handleEditCustomPreset(preset)}
+                onDeleteCustom={(preset) => handleCustomPresetDelete(preset)}
+              />
+            </View>
           )}
 
 
@@ -488,12 +622,19 @@ export default function NanoBananaScreen(): React.JSX.Element {
               <Text style={tw`text-sm text-gray-600 mb-3`}>
                 Add a photo of yourself to guide the Nano Banana model. If you skip this step, the preset will rely solely on the prompt.
               </Text>
-              <TouchableOpacity
-                onPress={handlePickReferenceImage}
-                style={tw`bg-blue-500 py-3 rounded-xl items-center`}
+
+              {/* Highlight Target for Upload Button */}
+              <View
+                collapsable={false}
+                ref={uploadButtonRef}
               >
-                <Text style={tw`text-white text-base font-semibold`}>Upload Reference</Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handlePickReferenceImage}
+                  style={tw`bg-blue-500 py-3 rounded-xl items-center`}
+                >
+                  <Text style={tw`text-white text-base font-semibold`}>Upload Reference</Text>
+                </TouchableOpacity>
+              </View>
 
               {referenceImageUri && (
                 <View style={tw`mt-4`}>
@@ -557,33 +698,14 @@ export default function NanoBananaScreen(): React.JSX.Element {
                 let r2Url: string | undefined = undefined;
 
                 if (imageUri && user?.id) {
-                  // Upload to R2
-                  // We show basic loading or just await?
-                  // Ideally specific UI for uploading, but we'll await here (UI might freeze briefly, user usually expects this)
-                  const uploadedKey = await r2Service.uploadImage(imageUri, user.id);
+                  // Upload to R2 (resized thumbnail)
+                  const uploadedKey = await createAndUploadThumbnail(imageUri, user.id);
                   if (uploadedKey) {
-                    // Construct URL if helper doesn't return full URL
-                    // Our r2Service now returns full URL if configured or key.
-                    // Let's assume r2Service returns something usable or just the key.
-                    // Using updated r2Service assumption (it returns full URL if domain set, or key). 
-                    // See previous read of r2Service.ts. 
-                    // It returns `fileName` (key) if EXPO_PUBLIC_R2_PUBLIC_DOMAIN is missing. 
-                    // To be safe we should store the key or url. 
-                    // Assuming the user WILL set the public domain or we use a cloudflare worker url.
-                    // For now, save the result.
                     r2Url = uploadedKey;
                   }
                 }
 
                 if (editingPresetId) {
-                  // Update existing
-                  // Note: updatePrompt currently only takes text/title in my types. I should check that.
-                  // I updated storageService but useCustomPrompts `updatePrompt` signature might be stricter?
-                  // useCustomPrompts implementation:
-                  // const updatePrompt = async (id: string, updates: { prompt_text?: string; title?: string })
-                  // I should have added thumbnail_url support there too. 
-                  // Let's do a quick fix-up if needed or just pass it if type allows (it might complain).
-                  // I will update useCustomPrompts right after this if I missed it.
                   await updatePrompt(editingPresetId, {
                     prompt_text: customPrompt.trim(),
                     title: 'Custom Preset',
@@ -591,11 +713,7 @@ export default function NanoBananaScreen(): React.JSX.Element {
                   });
                   goToConfirm(editingPresetId, 'Custom Preset', customPrompt.trim());
                 } else {
-                  // Create new
-                  // savePrompt now returns string | null (the new ID)
                   const newId = await savePrompt(customPrompt.trim(), 'Custom Preset', r2Url);
-
-                  // Use the new ID if available, otherwise fallback to 'custom' (which won't update thumbnail, but better than crash)
                   const idToUse = (typeof newId === 'string' && newId) ? newId : 'custom';
                   goToConfirm(idToUse, 'Custom Preset', customPrompt.trim());
                 }

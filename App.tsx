@@ -13,6 +13,10 @@ import { supabaseService } from './src/services/supabaseService';
 import { storeKitService } from './src/services/storeKitService';
 import { ENV } from './src/constants/config';
 
+// Onboarding
+import { OnboardingProvider } from './src/features/onboarding/OnboardingContext';
+import { OnboardingOverlay } from './src/features/onboarding/OnboardingOverlay';
+
 // Screens
 import UserScreen from './src/screens/UserScreen';
 import CameraScreen from './src/screens/CameraScreen';
@@ -141,88 +145,93 @@ function AuthenticatedApp(): React.JSX.Element {
   }
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator
-        initialRouteName="Camera"
-        screenOptions={{
-          headerShown: false,
-          gestureEnabled: true,
-          cardStyleInterpolator: ({ current, layouts }) => {
-            return {
-              cardStyle: {
-                transform: [
-                  {
-                    translateX: current.progress.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [layouts.screen.width, 0],
-                    }),
-                  },
-                ],
-              },
-            };
-          },
-        }}
-      >
-        <Stack.Screen
-          name="Home"
-          component={UserScreen}
-          options={{
-            title: 'PopCam',
+    <OnboardingProvider>
+      <NavigationContainer>
+        <Stack.Navigator
+          initialRouteName="Camera"
+          screenOptions={{
+            headerShown: false,
+            gestureEnabled: true,
+            cardStyleInterpolator: ({ current, layouts }) => {
+              return {
+                cardStyle: {
+                  transform: [
+                    {
+                      translateX: current.progress.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [layouts.screen.width, 0],
+                      }),
+                    },
+                  ],
+                },
+              };
+            },
           }}
-        />
-        <Stack.Screen
-          name="Camera"
-          component={CameraScreen}
-          options={{
-            title: 'Camera',
-            gestureEnabled: false, // Disable swipe back for camera
-          }}
-        />
-        <Stack.Screen
-          name="GalleryImage"
-          component={GalleryImageScreen}
-          options={{
-            title: 'AI Analysis',
-          }}
-        />
-        <Stack.Screen
-          name="Gallery"
-          component={GalleryScreen}
-          options={{
-            title: 'Gallery',
-          }}
-        />
-        <Stack.Screen
-          name="Settings"
-          component={SettingsScreen}
-          options={{
-            title: 'Settings',
-          }}
-        />
-        <Stack.Screen
-          name="NanoBanana"
-          component={NanoBananaScreen}
-          options={{
-            title: 'Nano Banana',
-          }}
-        />
+        >
+          <Stack.Screen
+            name="Home"
+            component={UserScreen}
+            options={{
+              title: 'PopCam',
+            }}
+          />
+          <Stack.Screen
+            name="Camera"
+            component={CameraScreen}
+            options={{
+              title: 'Camera',
+              gestureEnabled: false, // Disable swipe back for camera
+            }}
+          />
+          <Stack.Screen
+            name="GalleryImage"
+            component={GalleryImageScreen}
+            options={{
+              title: 'AI Analysis',
+            }}
+          />
+          <Stack.Screen
+            name="Gallery"
+            component={GalleryScreen}
+            options={{
+              title: 'Gallery',
+            }}
+          />
+          <Stack.Screen
+            name="Settings"
+            component={SettingsScreen}
+            options={{
+              title: 'Settings',
+            }}
+          />
+          <Stack.Screen
+            name="NanoBanana"
+            component={NanoBananaScreen}
+            options={{
+              title: 'Nano Banana',
+            }}
+          />
 
-        <Stack.Screen
-          name="NanoBananaResult"
-          component={NanoBananaResultScreen}
-          options={{
-            title: 'Nano Banana Result',
-          }}
-        />
-        <Stack.Screen
-          name="PurchaseCredits"
-          component={PurchaseCreditsScreen}
-          options={{
-            title: 'Buy Credits',
-          }}
-        />
-      </Stack.Navigator>
-    </NavigationContainer>
+          <Stack.Screen
+            name="NanoBananaResult"
+            component={NanoBananaResultScreen}
+            options={{
+              title: 'Nano Banana Result',
+            }}
+          />
+          <Stack.Screen
+            name="PurchaseCredits"
+            component={PurchaseCreditsScreen}
+            options={{
+              title: 'Buy Credits',
+            }}
+          />
+        </Stack.Navigator>
+
+        {/* Global Onboarding Overlay */}
+        <OnboardingOverlay />
+      </NavigationContainer>
+    </OnboardingProvider>
   );
 }
 

@@ -11,6 +11,7 @@ interface CreditsButtonProps {
     style?: any;
     iconColor?: string;
     textColor?: string;
+    tint?: 'light' | 'dark' | 'default';
 }
 
 export default function CreditsButton({
@@ -18,6 +19,7 @@ export default function CreditsButton({
     style,
     iconColor,
     textColor,
+    tint = 'light',
 }: CreditsButtonProps): React.JSX.Element {
     const navigation = useNavigation<any>();
     const { credits, isLoading: creditsLoading } = useCredits();
@@ -53,7 +55,7 @@ export default function CreditsButton({
         <TouchableOpacity onPress={handlePress} activeOpacity={0.8} style={style}>
             <BlurView
                 intensity={25}
-                tint="light"
+                tint={tint as any}
                 style={[
                     tw`px-4 py-2 rounded-full flex-row items-center`,
                     {

@@ -280,6 +280,9 @@ class SupabaseService {
       }
 
       console.log('[SupabaseService] fetch success. Count:', data?.length);
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/7568f864-cfb0-4b28-aa9e-daea10a985f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'supabaseService.ts:getCustomPrompts',message:'Raw thumbnail URLs from DB',data:{count:data?.length,thumbnails:data?.slice(0,5).map((d: { id: string; thumbnail_url?: string })=>({id:d.id,url:d.thumbnail_url?.substring(0,60)}))},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'DB-Query'})}).catch(()=>{});
+      // #endregion
       return data.map((item) => ({
         id: item.id,
         prompt_text: item.prompt_text,
@@ -290,6 +293,29 @@ class SupabaseService {
     } catch (error) {
       console.error('[SupabaseService] Error in getCustomPrompts:', error);
       return [];
+    }
+  }
+
+  async getCustomPrompt(id: string, userId: string): Promise<{ id: string; prompt_text: string; title?: string; thumbnail_url?: string; secondary_image_url?: string } | null> {
+    try {
+      if (!this.supabase) return null;
+
+      const { data, error } = await this.supabase
+        .from('custom_prompts')
+        .select('id, prompt_text, title, thumbnail_url, secondary_image_url')
+        .eq('id', id)
+        .eq('user_id', userId)
+        .single();
+
+      if (error) {
+        console.error('[SupabaseService] Error fetching single custom prompt:', error);
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('[SupabaseService] Error in getCustomPrompt:', error);
+      return null;
     }
   }
 

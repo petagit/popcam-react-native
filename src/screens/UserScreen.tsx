@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   Image,
   Alert,
   SafeAreaView,
+  LayoutRectangle,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,15 +18,16 @@ import tw from 'twrnc';
 import { MaterialIcons } from '@expo/vector-icons';
 import { RootStackParamList, ImageAnalysis } from '../types';
 import { storageService } from '../services/storageService';
-import { SignOutButton } from '../components/SignOutButton';
+import SignOutButton from '../components/buttons/SignOutButton';
 import { UserProfileSection } from '../components/UserProfileSection';
-import GlassButton from '../components/GlassButton';
+import GlassButton from '../components/buttons/GlassButton';
 import SettingsButton from '../components/buttons/SettingsButton';
 import CreditsButton from '../components/buttons/CreditsButton';
 import BackButton from '../components/buttons/BackButton';
 import AppBackground from '../components/AppBackground';
 import { BlurView } from 'expo-blur';
 import { colors, spacing, shadows } from '../styles/sharedStyles';
+
 
 type MaterialIconName = keyof typeof MaterialIcons.glyphMap;
 
@@ -48,9 +50,12 @@ export default function UserScreen(): React.JSX.Element {
   const [recentGenerations, setRecentGenerations] = useState<ImageAnalysis[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
+
   useEffect(() => {
     loadRecentGenerations();
   }, [user?.id]);
+
+
 
   const loadRecentGenerations = async (): Promise<void> => {
     try {
@@ -97,7 +102,19 @@ export default function UserScreen(): React.JSX.Element {
     Alert.alert('Connection Test', result);
   };
 
+
+
   const quickActions: QuickAction[] = [
+    {
+      id: 'nano-banana',
+      title: 'Nano Banana',
+      subtitle: 'AI Filters',
+      icon: 'auto-fix-high', // Magic icon representation
+      onPress: handleNanoBananaPress,
+      accentColor: '#9333ea', // purple-600
+      backgroundColor: '#f3e8ff', // purple-100
+      iconBackground: '#e9d5ff', // purple-200
+    },
     {
       id: 'camera',
       title: 'Back to PopCam',
@@ -105,7 +122,7 @@ export default function UserScreen(): React.JSX.Element {
       icon: 'camera-alt',
       onPress: handleCameraPress,
       accentColor: '#ea580c', // orange-600
-      backgroundColor: '#ffedd5', // orange-100 (unused in render but kept for consistency)
+      backgroundColor: '#ffedd5', // orange-100
       iconBackground: '#fed7aa', // orange-200
     },
     {
@@ -117,16 +134,6 @@ export default function UserScreen(): React.JSX.Element {
       accentColor: '#2563eb',
       backgroundColor: '#dbeafe',
       iconBackground: '#bfdbfe',
-    },
-    {
-      id: 'credits',
-      title: 'Buy Credits',
-      subtitle: 'Get more',
-      icon: 'bolt',
-      onPress: handlePurchaseCreditsPress,
-      accentColor: '#059669',
-      backgroundColor: '#d1fae5',
-      iconBackground: '#a7f3d0',
     },
   ];
 
@@ -183,6 +190,9 @@ export default function UserScreen(): React.JSX.Element {
           <View style={tw`flex-row justify-between items-center mb-4`}>
             <BackButton />
             <View style={tw`flex-row items-center gap-3`}>
+              {/* Debug / Onboarding Test Group */}
+
+
               <TouchableOpacity onPress={handleDebugPress} style={tw`bg-red-100 px-2 py-1 rounded`}>
                 <Text style={tw`text-xs text-red-800`}>Test DB</Text>
               </TouchableOpacity>
@@ -206,53 +216,54 @@ export default function UserScreen(): React.JSX.Element {
         {/* User summary */}
         {user && <UserProfileSection style={tw`mx-6 mb-4`} />}
 
-
-
-
-
         {/* Quick actions */}
         <View style={tw`px-6 mt-5`}>
           <View style={tw`flex-row gap-3 justify-center`}>
             {quickActions.map((action: QuickAction) => (
-              <TouchableOpacity
+              <View
                 key={action.id}
-                onPress={action.onPress}
-                activeOpacity={0.85}
-                style={[tw`flex-1`, { height: 140 }]}
+                style={tw`flex-1`}
+                collapsable={false}
               >
-                <View
-                  style={[
-                    tw`flex-1 items-center justify-center p-4 bg-white`,
-                    {
-                      borderRadius: spacing.md,
-                      ...shadows.small
-                    }
-                  ]}
+                <TouchableOpacity
+                  onPress={action.onPress}
+                  activeOpacity={0.85}
+                  style={{ height: 140, width: '100%' }}
                 >
                   <View
                     style={[
-                      tw`w-10 h-10 rounded-full items-center justify-center mb-3`,
-                      { backgroundColor: action.iconBackground },
+                      tw`flex-1 items-center justify-center p-4 bg-white`,
+                      {
+                        borderRadius: spacing.md,
+                        ...shadows.small
+                      }
                     ]}
                   >
-                    <MaterialIcons name={action.icon} size={22} color={action.accentColor} />
+                    <View
+                      style={[
+                        tw`w-10 h-10 rounded-full items-center justify-center mb-3`,
+                        { backgroundColor: action.iconBackground },
+                      ]}
+                    >
+                      <MaterialIcons name={action.icon} size={22} color={action.accentColor} />
+                    </View>
+                    <Text style={{
+                      fontSize: 18,
+                      fontWeight: '600',
+                      color: colors.text.primary,
+                      textAlign: 'center'
+                    }}>{action.title}</Text>
+                    <Text style={{
+                      fontSize: 14,
+                      color: colors.text.secondary,
+                      marginTop: 4,
+                      textAlign: 'center'
+                    }} numberOfLines={2}>
+                      {action.subtitle}
+                    </Text>
                   </View>
-                  <Text style={{
-                    fontSize: 18,
-                    fontWeight: '600',
-                    color: colors.text.primary,
-                    textAlign: 'center'
-                  }}>{action.title}</Text>
-                  <Text style={{
-                    fontSize: 14,
-                    color: colors.text.secondary,
-                    marginTop: 4,
-                    textAlign: 'center'
-                  }} numberOfLines={2}>
-                    {action.subtitle}
-                  </Text>
-                </View>
-              </TouchableOpacity>
+                </TouchableOpacity>
+              </View>
             ))}
           </View>
         </View>

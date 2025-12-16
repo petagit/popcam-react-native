@@ -3,8 +3,8 @@ import { TouchableOpacity, Text, StyleSheet, Alert, ViewStyle, TextStyle } from 
 import { useClerk } from '@clerk/clerk-expo';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList } from '../types';
-import { colors, spacing } from '../styles/sharedStyles';
+import { RootStackParamList } from '../../types';
+import { colors, spacing } from '../../styles/sharedStyles';
 import { MaterialIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import GlassButton from './GlassButton';
@@ -137,4 +137,6 @@ const styles = StyleSheet.create({
   largeButtonText: {
     fontSize: 18,
   },
-}); 
+});
+
+export default SignOutButton; 

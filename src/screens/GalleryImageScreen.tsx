@@ -20,7 +20,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useUser } from '@clerk/clerk-expo';
-import GlassButton from '../components/GlassButton';
+import GlassButton from '../components/buttons/GlassButton';
 import BackButton from '../components/buttons/BackButton';
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -28,7 +28,7 @@ import tw from 'twrnc';
 import { RootStackParamList, ImageAnalysis } from '../types';
 import { storageService } from '../services/storageService';
 import { MaterialIcons, FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
-import CameraButton from '../components/CameraButton';
+import CameraButton from '../components/buttons/CameraButton';
 import AppBackground from '../components/AppBackground';
 
 type GalleryImageScreenNavigationProp = StackNavigationProp<RootStackParamList, 'GalleryImage'>;

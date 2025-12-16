@@ -484,6 +484,21 @@ class StorageService {
     }
   }
 
+  async getCustomPrompt(id: string, userId?: string): Promise<{ id: string; prompt_text: string; title?: string; thumbnail_url?: string; secondary_image_url?: string } | null> {
+    try {
+      if (userId) {
+        return await supabaseService.getCustomPrompt(id, userId);
+      }
+
+      // Fallback local
+      const history = await this.getCustomPromptHistory();
+      return history.find(p => p.id === id) || null;
+    } catch (error) {
+      console.error('Error loading single custom prompt:', error);
+      return null;
+    }
+  }
+
   async deleteCustomPromptFromHistory(id: string, userId?: string): Promise<void> {
     try {
       if (userId) {

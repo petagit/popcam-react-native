@@ -25,7 +25,7 @@ import { storeKitService, InAppProduct } from '../services/storeKitService';
 import { supabaseService } from '../services/supabaseService';
 import { useCredits } from '../hooks/useCredits';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
-import GlassButton from '../components/GlassButton';
+import GlassButton from '../components/buttons/GlassButton';
 import BackButton from '../components/buttons/BackButton';
 import AppBackground from '../components/AppBackground';
 

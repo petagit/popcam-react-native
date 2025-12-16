@@ -19,7 +19,7 @@ import tw from 'twrnc';
 import { RootStackParamList } from '../types';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import GlassButton from '../components/GlassButton';
+import GlassButton from '../components/buttons/GlassButton';
 import { MaterialIcons } from '@expo/vector-icons';
 import AppBackground from '../components/AppBackground';
 

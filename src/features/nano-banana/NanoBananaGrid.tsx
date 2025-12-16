@@ -3,6 +3,8 @@ import { View, Text, TouchableOpacity, Image } from 'react-native';
 import tw from 'twrnc';
 import { MaterialIcons } from '@expo/vector-icons';
 import { NanoBananaPreset } from '../../lib/nanobanana-presets';
+import { NanoBananaThumbnail } from './NanoBananaThumbnail';
+import Animated, { FadeOut, Layout } from 'react-native-reanimated';
 
 export type GridItem =
     | { type: 'preset'; preset: NanoBananaPreset }
@@ -44,19 +46,26 @@ export const NanoBananaGrid: React.FC<NanoBananaGridProps> = ({
                 if (item.type === 'custom') {
                     const isSelectedCustom = selectedId === 'custom';
                     return (
-                        <TouchableOpacity
+                        <Animated.View
                             key={`custom-tile`}
+                            layout={Layout.duration(300)}
                             style={[
-                                tw`mb-2 rounded-xl border items-center justify-center`,
-                                isSelectedCustom ? tw`border-blue-500 bg-blue-50` : tw`border-gray-200 bg-white`,
                                 { width: tileSize, height: tileSize, marginRight },
+                                tw`mb-2`
                             ]}
-                            onPress={onOpenCustomPicker}
-                            accessibilityLabel="Custom prompt filter"
                         >
-                            <MaterialIcons name="add" size={32} color={isSelectedCustom ? '#1d4ed8' : '#111827'} />
-                            <Text style={tw`text-xs font-semibold text-gray-800 mt-2 text-center px-1`}>Add custom preset</Text>
-                        </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[
+                                    tw`flex-1 rounded-xl border items-center justify-center`,
+                                    isSelectedCustom ? tw`border-blue-500 bg-blue-50` : tw`border-gray-200 bg-white`,
+                                ]}
+                                onPress={onOpenCustomPicker}
+                                accessibilityLabel="Custom prompt filter"
+                            >
+                                <MaterialIcons name="add" size={32} color={isSelectedCustom ? '#1d4ed8' : '#111827'} />
+                                <Text style={tw`text-xs font-semibold text-gray-800 mt-2 text-center px-1`}>Add custom preset</Text>
+                            </TouchableOpacity>
+                        </Animated.View>
                     );
                 }
 
@@ -64,8 +73,10 @@ export const NanoBananaGrid: React.FC<NanoBananaGridProps> = ({
                     const preset = item.preset;
                     const isSelected = preset.id === selectedId;
                     return (
-                        <View
+                        <Animated.View
                             key={preset.id}
+                            layout={Layout.duration(300)}
+                            exiting={FadeOut.duration(300)}
                             style={[
                                 { width: tileSize, height: tileSize, marginRight },
                                 tw`mb-2`
@@ -80,20 +91,10 @@ export const NanoBananaGrid: React.FC<NanoBananaGridProps> = ({
                                 onLongPress={() => onLongPress(item)}
                                 delayLongPress={200}
                             >
-                                {preset.thumbnail_url ? (
-                                    <Image
-                                        source={{ uri: preset.thumbnail_url }}
-                                        style={[{ width: '100%', height: '100%' }]}
-                                        resizeMode="cover"
-                                    />
-                                ) : (
-                                    <View style={tw`flex-1 items-center justify-center p-2`}>
-                                        <MaterialIcons name="auto-fix-high" size={24} color="#9ca3af" />
-                                        <Text numberOfLines={2} style={tw`text-xs text-center text-gray-500 mt-1`}>
-                                            {preset.prompt_text}
-                                        </Text>
-                                    </View>
-                                )}
+                                <NanoBananaThumbnail
+                                    thumbnailUrl={preset.thumbnail_url}
+                                    promptText={preset.prompt_text}
+                                />
                                 {isSelected && (
                                     <View style={[tw`absolute inset-0 items-center justify-center`, { backgroundColor: 'rgba(29,78,216,0.25)' }]}>
                                         <Text style={tw`text-white text-xs font-semibold`}>Selected</Text>
@@ -122,7 +123,7 @@ export const NanoBananaGrid: React.FC<NanoBananaGridProps> = ({
                                     </TouchableOpacity>
                                 </>
                             )}
-                        </View>
+                        </Animated.View>
                     );
                 }
 
@@ -130,29 +131,36 @@ export const NanoBananaGrid: React.FC<NanoBananaGridProps> = ({
                 const preset = item.preset;
                 const isSelected = preset.id === selectedId;
                 return (
-                    <TouchableOpacity
+                    <Animated.View
                         key={preset.id}
+                        layout={Layout.duration(300)}
                         style={[
-                            tw`mb-2 rounded-xl border overflow-hidden`,
-                            isSelected ? tw`border-blue-500` : tw`border-gray-200`,
                             { width: tileSize, height: tileSize, marginRight },
+                            tw`mb-2`
                         ]}
-                        onPress={() => onSelect(item)}
-                        onLongPress={() => onLongPress(item)}
-                        delayLongPress={150}
-                        accessibilityLabel={preset.title}
                     >
-                        <Image
-                            source={preset.preview}
-                            style={[{ width: '100%', height: '100%' }]}
-                            resizeMode="cover"
-                        />
-                        {isSelected && (
-                            <View style={[tw`absolute inset-0 items-center justify-center`, { backgroundColor: 'rgba(29,78,216,0.25)' }]}>
-                                <Text style={tw`text-white text-xs font-semibold`}>Selected</Text>
-                            </View>
-                        )}
-                    </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[
+                                tw`flex-1 rounded-xl border overflow-hidden`,
+                                isSelected ? tw`border-blue-500` : tw`border-gray-200`,
+                                { flex: 1 },
+                            ]}
+                            onPress={() => onSelect(item)}
+                            onLongPress={() => onLongPress(item)}
+                            delayLongPress={150}
+                            accessibilityLabel={preset.title}
+                        >
+                            <NanoBananaThumbnail
+                                imageSource={preset.preview}
+                                promptText={preset.prompt}
+                            />
+                            {isSelected && (
+                                <View style={[tw`absolute inset-0 items-center justify-center`, { backgroundColor: 'rgba(29,78,216,0.25)' }]}>
+                                    <Text style={tw`text-white text-xs font-semibold`}>Selected</Text>
+                                </View>
+                            )}
+                        </TouchableOpacity>
+                    </Animated.View>
                 );
             })}
         </View>

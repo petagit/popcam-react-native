@@ -17,16 +17,19 @@ import { useUser } from '@clerk/clerk-expo';
 import tw from 'twrnc';
 import { RootStackParamList, ImageAnalysis } from '../types';
 import { imageUtils } from '../utils/imageUtils';
+import { useOnboarding } from '../features/onboarding/OnboardingContext';
 import { storageService } from '../services/storageService';
 import { useCredits } from '../hooks/useCredits';
-import GlassButton from '../components/GlassButton';
+import GlassButton from '../components/buttons/GlassButton';
 import CreditsButton from '../components/buttons/CreditsButton';
 import { MaterialIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import LoadingOverlay from '../components/LoadingOverlay';
 import { NANO_BANANA_PRESETS } from '../lib/nanobanana-presets';
 import { VolumeManager } from 'react-native-volume-manager';
 import { DeviceMotion } from 'expo-sensors';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
+import { useEnvironmentBrightness } from '../hooks/useEnvironmentBrightness';
 
 type CameraScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Camera'>;
 type CameraFacing = 'front' | 'back';
@@ -36,9 +39,19 @@ export default function CameraScreen(): React.JSX.Element {
   const { user } = useUser();
   const cameraRef = useRef<CameraView>(null);
   const { credits, isLoading: creditsLoading } = useCredits();
+  const { isDark } = useEnvironmentBrightness();
+
+  const uiTint = isDark ? 'light' : 'dark';
+  const iconColor = isDark ? '#111827' : '#FFFFFF';
+  const textColor = isDark ? '#111827' : '#FFFFFF';
 
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [cameraType, setCameraType] = useState<CameraFacing>('back');
+
+  // Onboarding
+  const { startOnboarding, isActive, currentStep, nextStep, registerTarget } = useOnboarding();
+  const nanoButtonRef = useRef<View>(null);
+  const shutterButtonRef = useRef<View>(null);
   const [isCapturing, setIsCapturing] = useState<boolean>(false);
   const [lastGalleryImage, setLastGalleryImage] = useState<string | null>(null);
   const [currentPresetTitle, setCurrentPresetTitle] = useState<string>('Nano Banana');
@@ -54,6 +67,28 @@ export default function CameraScreen(): React.JSX.Element {
     loadLastGalleryImage();
     updateCurrentPreset();
   }, []);
+
+  // Onboarding Target Registration
+  useEffect(() => {
+    if (!isActive) return;
+
+    const measureAndRegister = (ref: React.RefObject<any>, step: string) => {
+      // Small timeout to ensure layout is ready
+      setTimeout(() => {
+        ref.current?.measureInWindow((x: number, y: number, width: number, height: number) => {
+          if (width > 0 && height > 0) {
+            registerTarget(step as any, { x, y, width, height });
+          }
+        });
+      }, 100);
+    };
+
+    if (currentStep === 'NANO_BANANA_BUTTON') {
+      measureAndRegister(nanoButtonRef, 'NANO_BANANA_BUTTON');
+    } else if (currentStep === 'TAKE_PICTURE') {
+      measureAndRegister(shutterButtonRef, 'TAKE_PICTURE');
+    }
+  }, [isActive, currentStep]);
 
   // Monitor Device Orientation
   const [deviceOrientation, setDeviceOrientation] = useState<number>(0);
@@ -293,6 +328,10 @@ export default function CameraScreen(): React.JSX.Element {
       presetTitle: currentPresetTitle,
       showConfirmation: false, // Bypass confirmation
     });
+
+    if (isActive && currentStep === 'TAKE_PICTURE') {
+      nextStep();
+    }
   };
 
   // Hardware Button (Volume) Listener for Capture
@@ -436,11 +475,11 @@ export default function CameraScreen(): React.JSX.Element {
                 key={label}
                 onPress={() => setZoom(z)}
                 style={[
-                  tw`w-8 h-8 rounded-full items-center justify-center bg-black/50`,
-                  isSelected && tw`bg-yellow-500`
+                  tw`w-8 h-8 rounded-full items-center justify-center`,
+                  { backgroundColor: isSelected ? '#EAB308' : (isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)') }
                 ]}
               >
-                <Text style={[tw`text-xs font-bold`, isSelected ? tw`text-black` : tw`text-white`]}>
+                <Text style={[tw`text-xs font-bold`, { color: isSelected ? 'black' : (isDark ? 'black' : 'white') }]}>
                   {label}
                 </Text>
               </TouchableOpacity>
@@ -449,14 +488,24 @@ export default function CameraScreen(): React.JSX.Element {
         </View>
       </View>
 
+      {/* Test Onboard Button (Debug) */}
+      <View style={tw`absolute top-24 left-4 z-20`}>
+        <TouchableOpacity
+          onPress={startOnboarding}
+          style={tw`bg-purple-500/80 px-3 py-1.5 rounded-full`}
+        >
+          <Text style={tw`text-white text-xs font-bold`}>Test Onboard</Text>
+        </TouchableOpacity>
+      </View>
+
       <View style={tw`absolute top-12 left-0 right-0 px-4 flex-row justify-between items-center z-10`}>
-        <GlassButton size={44} onPress={() => navigation.navigate('Home')}>
-          <MaterialIcons name="person" size={20} color="#111827" />
+        <GlassButton size={44} onPress={() => navigation.navigate('Home')} tint={uiTint}>
+          <MaterialIcons name="person" size={20} color={iconColor} />
         </GlassButton>
-        <GlassButton size={44} onPress={selectFromGallery}>
-          <MaterialIcons name="file-upload" size={20} color="#111827" />
+        <GlassButton size={44} onPress={selectFromGallery} tint={uiTint}>
+          <MaterialIcons name="file-upload" size={20} color={iconColor} />
         </GlassButton>
-        <CreditsButton variant="glass" />
+        <CreditsButton variant="glass" tint={uiTint} iconColor={iconColor} textColor={textColor} />
       </View>
 
       {/* Preset Name Display */}
@@ -465,8 +514,8 @@ export default function CameraScreen(): React.JSX.Element {
           onPress={() => navigation.navigate('NanoBanana', { mode: 'picker' })}
           activeOpacity={0.8}
         >
-          <BlurView intensity={20} tint="dark" style={[tw`px-4 py-1.5 rounded-full`, { overflow: 'hidden' }]}>
-            <Text style={tw`text-white font-semibold text-sm shadow-sm`}>
+          <BlurView intensity={20} tint={uiTint} style={[tw`px-4 py-1.5 rounded-full`, { overflow: 'hidden' }]}>
+            <Text style={[tw`font-semibold text-sm shadow-sm`, { color: textColor }]}>
               {currentPresetTitle}
             </Text>
           </BlurView>
@@ -475,7 +524,7 @@ export default function CameraScreen(): React.JSX.Element {
 
 
       <View style={tw`absolute bottom-12 left-0 right-0 px-6 flex-row justify-between items-center z-10`}>
-        <GlassButton size={64} onPress={() => navigation.navigate('Gallery')}>
+        <GlassButton size={64} onPress={() => navigation.navigate('Gallery')} tint={uiTint}>
           {lastGalleryImage ? (
             <Image
               source={{ uri: lastGalleryImage }}
@@ -483,49 +532,54 @@ export default function CameraScreen(): React.JSX.Element {
               resizeMode="cover"
             />
           ) : (
-            <MaterialIcons name="auto-awesome" size={28} color="#111827" />
+            <MaterialIcons name="auto-awesome" size={28} color={iconColor} />
           )}
         </GlassButton>
 
-        <TouchableOpacity onPress={takePicture} disabled={isCapturing} activeOpacity={0.9}>
-          <BlurView
-            intensity={35}
-            tint="light"
-            style={[tw`items-center justify-center`, { width: 96, height: 96, borderRadius: 48, borderWidth: 1, borderColor: 'rgba(255,255,255,0.45)', backgroundColor: 'transparent', overflow: 'hidden' }]}
-          >
-            {isCapturing ? (
-              <ActivityIndicator color="#111827" size="large" />
-            ) : (
-              <View style={[tw`bg-white`, { width: 72, height: 72, borderRadius: 36, borderWidth: 3, borderColor: '#111827' }]} />
-            )}
-          </BlurView>
-        </TouchableOpacity>
+        <View ref={shutterButtonRef} collapsable={false}>
+          <TouchableOpacity onPress={takePicture} disabled={isCapturing} activeOpacity={0.9}>
+            <BlurView
+              intensity={35}
+              tint={uiTint}
+              style={[tw`items-center justify-center`, { width: 96, height: 96, borderRadius: 48, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.2)', backgroundColor: 'transparent', overflow: 'hidden' }]}
+            >
+              {isCapturing ? (
+                <ActivityIndicator color={iconColor} size="large" />
+              ) : (
+                <View style={[tw``, { width: 72, height: 72, borderRadius: 36, borderWidth: 3, borderColor: iconColor, backgroundColor: isDark ? 'white' : 'rgba(255,255,255,0.2)' }]} />
+              )}
+            </BlurView>
+          </TouchableOpacity>
+
+
+        </View>
 
         <View style={tw`flex-row items-center`}>
-          <GlassButton size={64} onPress={() => navigation.navigate('NanoBanana', { mode: 'picker' })} style={tw`mr-3`}>
-            <View style={tw`items-center`}>
-              <MaterialIcons name="auto-awesome" size={24} color="#111827" />
-              <Text style={tw`text-[10px] text-gray-800 font-semibold mt-1`}>Nano</Text>
-            </View>
-          </GlassButton>
-          <GlassButton size={64} onPress={toggleCameraType}>
-            <MaterialIcons name="cameraswitch" size={28} color="#111827" />
+          <View ref={nanoButtonRef} collapsable={false}>
+            <GlassButton
+              size={64}
+              onPress={() => {
+                if (isActive && currentStep === 'NANO_BANANA_BUTTON') {
+                  nextStep();
+                }
+                navigation.navigate('NanoBanana', { mode: 'picker' });
+              }}
+              style={tw`mr-3`}
+              tint={uiTint}
+            >
+              <View style={tw`items-center`}>
+                <MaterialIcons name="auto-awesome" size={24} color={iconColor} />
+                <Text style={[tw`text-[10px] font-semibold mt-1`, { color: textColor }]}>Nano</Text>
+              </View>
+            </GlassButton>
+          </View>
+          <GlassButton size={64} onPress={toggleCameraType} tint={uiTint}>
+            <MaterialIcons name="cameraswitch" size={28} color={iconColor} />
           </GlassButton>
         </View>
       </View>
 
-      {
-        isCapturing && (
-          <View style={tw`absolute top-0 left-0 right-0 bottom-0 bg-black bg-opacity-80 justify-center items-center z-50`}>
-            <Image
-              source={require('../../assets/loading-animation.gif')}
-              style={{ width: 100, height: 100 }}
-              resizeMode="contain"
-            />
-            <Text style={tw`mt-4 text-white font-semibold text-lg`}>Processing...</Text>
-          </View>
-        )
-      }
+      <LoadingOverlay visible={isCapturing} message="Processing..." />
     </View >
   );
 }

@@ -17,7 +17,7 @@ import { RootStackParamList } from '../types';
 import { storageService } from '../services/storageService';
 import { supabaseService } from '../services/supabaseService';
 import { MaterialIcons } from '@expo/vector-icons';
-import GlassButton from '../components/GlassButton';
+import GlassButton from '../components/buttons/GlassButton';
 import BackButton from '../components/buttons/BackButton';
 import AppBackground from '../components/AppBackground';
 import { useCredits } from '../hooks/useCredits';

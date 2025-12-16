@@ -3,7 +3,7 @@ import { TouchableOpacity } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import tw from 'twrnc';
 import { BlurView } from 'expo-blur';
-import { sharedStyles } from '../styles/sharedStyles';
+import { sharedStyles } from '../../styles/sharedStyles';
 
 interface CameraButtonProps {
   onPress: () => void;
@@ -11,10 +11,10 @@ interface CameraButtonProps {
   style?: any;
 }
 
-export default function CameraButton({ 
-  onPress, 
+export default function CameraButton({
+  onPress,
   size = 'medium',
-  style 
+  style
 }: CameraButtonProps): React.JSX.Element {
   const getSizeStyles = () => {
     switch (size) {

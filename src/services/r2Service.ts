@@ -29,6 +29,7 @@ class R2Service {
                 accessKeyId: ENV.R2_ACCESS_KEY_ID,
                 secretAccessKey: ENV.R2_SECRET_ACCESS_KEY,
             },
+            forcePathStyle: true, // R2 requires path-style access (account.r2.../bucket/key)
         });
 
         return this.s3Client;
@@ -81,7 +82,14 @@ class R2Service {
                     // Start after the domain (roughly). R2/S3 URLs are usually /BUCKET/KEY or HOST/KEY.
                     // Our R2 URL: https://BUCKET.ACCOUNT.r2..../KEY
                     const urlObj = new URL(path);
-                    const key = urlObj.pathname.startsWith('/') ? urlObj.pathname.substring(1) : urlObj.pathname;
+                    let key = urlObj.pathname.startsWith('/') ? urlObj.pathname.substring(1) : urlObj.pathname;
+
+                    // Fix: Remove bucket name from path if present (S3 path-style access pattern)
+                    // R2/S3 URLs often include the bucket name as the first segment of the path.
+                    if (key.startsWith(`${this.bucketName}/`)) {
+                        key = key.substring(this.bucketName.length + 1);
+                    }
+
                     // Proceed to re-sign this key
                     path = decodeURIComponent(key);
                 } catch (e) {
@@ -95,12 +103,16 @@ class R2Service {
 
         if (path.startsWith('file://')) return path;
 
+        /*
         const publicDomain = process.env.EXPO_PUBLIC_R2_PUBLIC_DOMAIN;
         if (publicDomain) {
+            console.log('[R2Debug] Using Public Domain:', publicDomain);
             const cleanPath = path.startsWith('/') ? path.substring(1) : path;
             const cleanDomain = publicDomain.endsWith('/') ? publicDomain.substring(0, publicDomain.length - 1) : publicDomain;
             return `${cleanDomain}/${cleanPath}`;
         }
+        */
+        console.log('[R2Debug] No Public Domain (or disabled), generating signed URL for:', path);
 
         // Generate Presigned URL
         try {

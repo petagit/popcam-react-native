@@ -17,9 +17,9 @@ import { useUser } from '@clerk/clerk-expo';
 import tw from 'twrnc';
 import { RootStackParamList, ImageAnalysis } from '../types';
 import { storageService } from '../services/storageService';
-import CameraButton from '../components/CameraButton';
+import CameraButton from '../components/buttons/CameraButton';
 import { MaterialIcons } from '@expo/vector-icons';
-import GlassButton from '../components/GlassButton';
+import GlassButton from '../components/buttons/GlassButton';
 import BackButton from '../components/buttons/BackButton';
 import AppBackground from '../components/AppBackground';
 
