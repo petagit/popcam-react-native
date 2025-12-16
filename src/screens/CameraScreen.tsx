@@ -83,12 +83,11 @@ export default function CameraScreen(): React.JSX.Element {
       }, 100);
     };
 
-    if (currentStep === 'NANO_BANANA_BUTTON') {
-      measureAndRegister(nanoButtonRef, 'NANO_BANANA_BUTTON');
-    } else if (currentStep === 'TAKE_PICTURE') {
-      measureAndRegister(shutterButtonRef, 'TAKE_PICTURE');
-    }
-  }, [isActive, currentStep]);
+    // Register ALL targets if available, regardless of currentStep
+    // This allows pre-registration so transitions flow smoothly
+    measureAndRegister(nanoButtonRef, 'NANO_BANANA_BUTTON');
+    measureAndRegister(shutterButtonRef, 'TAKE_PICTURE');
+  }, [isActive]);
 
   // Monitor Device Orientation
   const [deviceOrientation, setDeviceOrientation] = useState<number>(0);
@@ -488,15 +487,7 @@ export default function CameraScreen(): React.JSX.Element {
         </View>
       </View>
 
-      {/* Test Onboard Button (Debug) */}
-      <View style={tw`absolute top-24 left-4 z-20`}>
-        <TouchableOpacity
-          onPress={startOnboarding}
-          style={tw`bg-purple-500/80 px-3 py-1.5 rounded-full`}
-        >
-          <Text style={tw`text-white text-xs font-bold`}>Test Onboard</Text>
-        </TouchableOpacity>
-      </View>
+
 
       <View style={tw`absolute top-12 left-0 right-0 px-4 flex-row justify-between items-center z-10`}>
         <GlassButton size={44} onPress={() => navigation.navigate('Home')} tint={uiTint}>

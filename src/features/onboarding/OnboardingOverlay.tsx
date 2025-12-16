@@ -9,6 +9,7 @@ const AnimatedRect = Animated.createAnimatedComponent(Rect);
 
 export const OnboardingOverlay: React.FC = () => {
     const { isActive, currentStep, targets, nextStep, stopOnboarding } = useOnboarding();
+
     const fadeAnim = useRef(new Animated.Value(0)).current; // Global overlay fade
     const pulseAnim = useRef(new Animated.Value(0)).current;
 
@@ -83,15 +84,20 @@ export const OnboardingOverlay: React.FC = () => {
 
     // Instructions based on step
     let instruction = '';
+    let maskRadius = 10; // Default
+
     switch (currentStep) {
         case 'NANO_BANANA_BUTTON':
             instruction = 'Tap here to get started with Nano Banana!';
+            maskRadius = (targetW + 10) / 2; // Circle
             break;
         case 'PICK_FILTER':
             instruction = 'Choose a filter style you like.';
+            maskRadius = 24; // Rounded Rect
             break;
         case 'TAKE_PICTURE':
             instruction = 'Take a selfie or upload a photo to see the magic!';
+            maskRadius = (targetW + 10) / 2; // Circle
             break;
     }
 
@@ -109,8 +115,8 @@ export const OnboardingOverlay: React.FC = () => {
                                     y={targetY - 5}
                                     width={targetW + 10}
                                     height={targetH + 10}
-                                    rx={10}
-                                    ry={10}
+                                    rx={maskRadius}
+                                    ry={maskRadius}
                                     fill="#000"
                                     opacity={stepSvgAnim}
                                 />

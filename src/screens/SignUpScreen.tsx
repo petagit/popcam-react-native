@@ -22,6 +22,7 @@ import { BlurView } from 'expo-blur';
 import GlassButton from '../components/buttons/GlassButton';
 import { MaterialIcons } from '@expo/vector-icons';
 import AppBackground from '../components/AppBackground';
+import { useOnboarding } from '../features/onboarding/OnboardingContext';
 
 type SignUpScreenNavigationProp = StackNavigationProp<RootStackParamList, 'SignUp'>;
 
@@ -32,6 +33,7 @@ export default function SignUpScreen(): React.JSX.Element {
   const { startOAuthFlow: startGoogleOAuth } = useOAuth({ strategy: 'oauth_google' });
   const { startOAuthFlow: startAppleOAuth } = useOAuth({ strategy: 'oauth_apple' });
   const navigation = useNavigation<SignUpScreenNavigationProp>();
+  const { startOnboarding } = useOnboarding();
 
   const [emailAddress, setEmailAddress] = useState<string>('');
   const [password, setPassword] = useState<string>('');
@@ -70,6 +72,7 @@ export default function SignUpScreen(): React.JSX.Element {
 
       if (createdSessionId && setActiveOAuth) {
         await setActiveOAuth({ session: createdSessionId });
+        startOnboarding();
         navigation.navigate('Camera');
       }
     } catch (err: any) {
@@ -88,6 +91,7 @@ export default function SignUpScreen(): React.JSX.Element {
 
       if (createdSessionId && setActiveOAuth) {
         await setActiveOAuth({ session: createdSessionId });
+        startOnboarding();
         navigation.navigate('Camera');
       }
     } catch (err: any) {
@@ -110,6 +114,7 @@ export default function SignUpScreen(): React.JSX.Element {
 
       if (signUpAttempt.status === 'complete') {
         await setActive({ session: signUpAttempt.createdSessionId });
+        startOnboarding();
         navigation.navigate('Camera');
       } else {
         console.error(JSON.stringify(signUpAttempt, null, 2));

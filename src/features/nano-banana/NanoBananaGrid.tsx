@@ -54,17 +54,19 @@ export const NanoBananaGrid: React.FC<NanoBananaGridProps> = ({
                                 tw`mb-2`
                             ]}
                         >
-                            <TouchableOpacity
-                                style={[
-                                    tw`flex-1 rounded-xl border items-center justify-center`,
-                                    isSelectedCustom ? tw`border-blue-500 bg-blue-50` : tw`border-gray-200 bg-white`,
-                                ]}
-                                onPress={onOpenCustomPicker}
-                                accessibilityLabel="Custom prompt filter"
-                            >
-                                <MaterialIcons name="add" size={32} color={isSelectedCustom ? '#1d4ed8' : '#111827'} />
-                                <Text style={tw`text-xs font-semibold text-gray-800 mt-2 text-center px-1`}>Add custom preset</Text>
-                            </TouchableOpacity>
+                            <View collapsable={false} style={tw`flex-1`}>
+                                <TouchableOpacity
+                                    style={[
+                                        tw`flex-1 rounded-xl border items-center justify-center`,
+                                        isSelectedCustom ? tw`border-blue-500 bg-blue-50` : tw`border-gray-200 bg-white`,
+                                    ]}
+                                    onPress={onOpenCustomPicker}
+                                    accessibilityLabel="Custom prompt filter"
+                                >
+                                    <MaterialIcons name="add" size={32} color={isSelectedCustom ? '#1d4ed8' : '#111827'} />
+                                    <Text style={tw`text-xs font-semibold text-gray-800 mt-2 text-center px-1`}>Add custom preset</Text>
+                                </TouchableOpacity>
+                            </View>
                         </Animated.View>
                     );
                 }

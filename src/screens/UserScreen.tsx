@@ -47,6 +47,7 @@ type UserScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
 export default function UserScreen(): React.JSX.Element {
   const navigation = useNavigation<UserScreenNavigationProp>();
   const { user } = useUser();
+  const { startOnboarding } = useOnboarding(); // Hook
   const [recentGenerations, setRecentGenerations] = useState<ImageAnalysis[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
@@ -104,7 +105,22 @@ export default function UserScreen(): React.JSX.Element {
 
 
 
+  const handleTutorialPress = (): void => {
+    startOnboarding();
+    navigation.navigate('Camera');
+  };
+
   const quickActions: QuickAction[] = [
+    {
+      id: 'tutorial',
+      title: 'Tutorial',
+      subtitle: 'How to use',
+      icon: 'school',
+      onPress: handleTutorialPress,
+      accentColor: '#059669', // emerald-600
+      backgroundColor: '#d1fae5', // emerald-100
+      iconBackground: '#a7f3d0', // emerald-200
+    },
     {
       id: 'nano-banana',
       title: 'Nano Banana',

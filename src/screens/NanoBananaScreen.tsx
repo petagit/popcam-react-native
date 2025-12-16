@@ -54,6 +54,13 @@ export default function NanoBananaScreen(): React.JSX.Element {
 
   const { promptHistory, loadPromptHistory, savePrompt, deletePrompt, updatePrompt } = useCustomPrompts();
 
+  // Ensure we are on the correct step if coming from Camera
+  useEffect(() => {
+    if (isActive && currentStep === 'NANO_BANANA_BUTTON') {
+      nextStep();
+    }
+  }, [isActive, currentStep, nextStep]);
+
   useFocusEffect(
     useCallback(() => {
       loadPromptHistory();
@@ -74,31 +81,36 @@ export default function NanoBananaScreen(): React.JSX.Element {
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
 
   // Refs for onboarding targets
-  const firstFilterRef = useRef<View>(null);
+  const filterGridRef = useRef<View>(null);
   const uploadButtonRef = useRef<View>(null);
 
   // Onboarding effect for registering targets
+  // Onboarding effect for registering targets
+  const measureAndRegister = useCallback((ref: React.RefObject<any>, step: 'PICK_FILTER' | 'TAKE_PICTURE') => {
+    if (!isActive) return;
+
+    // Register whenever the element is available, regardless of current step.
+    // This handles cases where layout happens before step transition.
+    if (ref.current) {
+      ref.current.measureInWindow((x: number, y: number, width: number, height: number) => {
+        if (width > 0 && height > 0) {
+          registerTarget(step, { x, y, width, height });
+        }
+      });
+    }
+  }, [isActive, registerTarget]);
+
   useEffect(() => {
     if (!isActive) return;
 
-    const measureAndRegister = (ref: React.RefObject<any>, step: 'PICK_FILTER' | 'TAKE_PICTURE') => {
-      if (currentStep === step && ref.current) {
-        ref.current.measureInWindow((x: number, y: number, width: number, height: number) => {
-          if (width > 0 && height > 0) {
-            registerTarget(step, { x, y, width, height });
-          }
-        });
-      }
-    };
-
     // Need a slight delay or retry because grid might be rendering or layout shifting
     const t = setTimeout(() => {
-      measureAndRegister(firstFilterRef, 'PICK_FILTER');
+      measureAndRegister(filterGridRef, 'PICK_FILTER');
       measureAndRegister(uploadButtonRef, 'TAKE_PICTURE');
     }, 500);
 
     return () => clearTimeout(t);
-  }, [isActive, currentStep, isLoadingPresets]); // depend on loadingPresets so we retry when grid appears
+  }, [isActive, currentStep, isLoadingPresets, measureAndRegister]);
 
   const loadLocalPresets = useCallback(async () => {
     setIsLoadingPresets(true);
@@ -280,7 +292,7 @@ export default function NanoBananaScreen(): React.JSX.Element {
         // If user clicks Filter first (Step 2), it alerts "Photo Required".
         // That might be confusing for onboarding.
         // If step 2 is "Pick Filter", user picks filter. It alerts "Photo Required".
-        // Then Step 3 highlights "Upload". User uploads.
+        // Then Step 3 highlights Upload.
         // Then user needs to click Filter AGAIN to generate?
         // OR `goToConfirm` should effectively select it but wait for image?
         // `handleSelectPreset` sets ID.
@@ -551,33 +563,10 @@ export default function NanoBananaScreen(): React.JSX.Element {
             // Yes!
             <View
               collapsable={false}
-              ref={firstFilterRef} // Actually ref the container, and since first item is top-left...
-            // But wait, there's `CustomPromptSection` above.
-            // If I ref this View wrapping grid, `measureInWindow` gives top-left of Grid.
-            // First item is at (0,0) of this View.
-            // Size is `tileSize` x `tileSize`.
-            // So I can hack the measurement: measure View, use x,y and tileSize for width/height.
-            // But `firstFilterRef` is View.
+              ref={filterGridRef}
+              style={tw`w-full`}
+              onLayout={() => measureAndRegister(filterGridRef, 'PICK_FILTER')}
             >
-              {/** 
-                  * Hack for Onboarding Target Registration:
-                  * We use a dummy view positioned absolutely over the first item slot to capture its layout perfectly?
-                  * Or just use the container and math.
-                  * Let's use the container ref `firstFilterRef` and in the effect use `tileSize`.
-                  * 
-                  * Wait, `measureAndRegister` takes a ref and registers its WHOLE size.
-                  * I need to register just the tile size.
-                  * I will modify the effect to handle `firstFilterRef` specially or using a specific sub-view.
-                  * 
-                  * Let's put a View with `width: tileSize, height: tileSize` and `position: absolute` at 0,0.
-                  * Give THIS view the ref.
-                  */}
-              <View
-                pointerEvents="none"
-                style={{ position: 'absolute', top: 0, left: 0, width: tileSize, height: tileSize, zIndex: -1 }}
-                ref={firstFilterRef}
-              />
-
               <NanoBananaGrid
                 items={gridItems}
                 selectedId={selectedPresetId}
@@ -627,6 +616,8 @@ export default function NanoBananaScreen(): React.JSX.Element {
               <View
                 collapsable={false}
                 ref={uploadButtonRef}
+                style={tw`w-full`}
+                onLayout={() => measureAndRegister(uploadButtonRef, 'TAKE_PICTURE')}
               >
                 <TouchableOpacity
                   onPress={handlePickReferenceImage}

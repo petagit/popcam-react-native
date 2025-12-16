@@ -29,6 +29,7 @@ import { r2Service } from '../services/r2Service';
 import { supabaseService } from '../services/supabaseService';
 import { Toast } from '../components/Toast';
 import { captureRef } from 'react-native-view-shot';
+import { BlurView } from 'expo-blur';
 
 
 type NanoBananaResultNavigationProp = StackNavigationProp<RootStackParamList, 'NanoBananaResult'>;
@@ -69,6 +70,8 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
     }
     return () => clearInterval(interval);
   }, [isGenerating]);
+
+
 
   const { user } = useUser();
   const { credits, hasEnoughCredits, deductCredits, isLoading: creditsLoading, refetchCredits } = useCredits();
@@ -428,27 +431,28 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
 
             {/* Loading Overlay */}
             {isGenerating && (
-              <View style={[tw`absolute z-20 top-0 left-0 right-0 bottom-0 justify-center items-center`, { backgroundColor: 'rgba(0,0,0,0.7)' }]}>
+              <View style={[tw`absolute z-20 top-0 left-0 right-0 bottom-0 justify-center items-center`, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
+                <BlurView intensity={20} tint="dark" style={tw`absolute inset-0`} />
                 <View style={tw`w-4/5 items-center`}>
                   <Image
                     source={require('../../assets/loading-animation.gif')}
-                    style={tw`w-16 h-16 mb-4`}
+                    style={tw`w-30 h-30 mb-5`}
                     resizeMode="contain"
                   />
-                  <Text style={tw`text-white text-lg font-bold mb-4`}>Creating Masterpiece...</Text>
+                  <Text style={tw`text-white text-lg font-bold mb-4 tracking-wide shadow-lg`}>Creating Masterpiece...</Text>
 
                   {/* Progress Bar Container */}
                   <View style={tw`w-full h-2 bg-gray-700 rounded-full overflow-hidden mb-2`}>
                     {/* Simulated Progress Fill */}
                     <View
                       style={[
-                        tw`h-full bg-blue-500 rounded-full`,
+                        tw`h-full bg-purple-500 rounded-full`,
                         { width: `${progress}%` }
                       ]}
                     />
                   </View>
 
-                  <Text style={tw`text-blue-300 text-sm font-semibold`}>{progress}%</Text>
+                  <Text style={tw`text-gray-300 text-sm font-semibold`}>{progress}%</Text>
                 </View>
               </View>
             )}

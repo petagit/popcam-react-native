@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, Image, ActivityIndicator, ImageSourcePropType } from 'react-native';
+import { View, Text, Image, ImageSourcePropType } from 'react-native';
 import tw from 'twrnc';
 import { MaterialIcons } from '@expo/vector-icons';
 import { r2Service } from '../../services/r2Service';
+import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing } from 'react-native-reanimated';
 
 interface NanoBananaThumbnailProps {
     thumbnailUrl?: string; // This could be a full URL, a file path, or an R2 key
@@ -19,7 +20,7 @@ export const NanoBananaThumbnail: React.FC<NanoBananaThumbnailProps> = ({ thumbn
     const [imageUri, setImageUri] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [loadError, setLoadError] = useState<boolean>(false);
-    
+
     // Track the last thumbnailUrl we processed to detect changes
     const lastProcessedUrlRef = useRef<string | undefined>(undefined);
 
@@ -43,7 +44,7 @@ export const NanoBananaThumbnail: React.FC<NanoBananaThumbnailProps> = ({ thumbn
 
         // Check if thumbnailUrl actually changed (not just a re-render)
         const urlChanged = thumbnailUrl !== lastProcessedUrlRef.current;
-        
+
         // #region agent log
         console.log('[DEBUG-Thumb] Effect - url:', getFilename(thumbnailUrl), 'changed:', urlChanged, 'prev:', getFilename(lastProcessedUrlRef.current));
         // #endregion
@@ -114,11 +115,7 @@ export const NanoBananaThumbnail: React.FC<NanoBananaThumbnailProps> = ({ thumbn
 
     // Render loading state
     if (isLoading) {
-        return (
-            <View style={tw`flex-1 items-center justify-center bg-gray-100`}>
-                <ActivityIndicator size="small" color="#9ca3af" />
-            </View>
-        );
+        return <LoadingOverlay />;
     }
 
     // Render image if we have a valid URI and no error
@@ -130,7 +127,7 @@ export const NanoBananaThumbnail: React.FC<NanoBananaThumbnailProps> = ({ thumbn
         return (
             <Image
                 key={imageUri}
-                source={{ 
+                source={{
                     uri: imageUri,
                     // Note: removed cache:'reload' and query param as they may cause issues with R2
                 }}
@@ -161,3 +158,30 @@ export const NanoBananaThumbnail: React.FC<NanoBananaThumbnailProps> = ({ thumbn
         </View>
     );
 };
+
+const LoadingOverlay = () => {
+    const opacity = useSharedValue(0.3);
+
+    useEffect(() => {
+        opacity.value = withRepeat(
+            withTiming(1, { duration: 800, easing: Easing.inOut(Easing.ease) }),
+            -1,
+            true
+        );
+    }, []);
+
+    const animatedStyle = useAnimatedStyle(() => ({
+        opacity: opacity.value,
+    }));
+
+    return (
+        <View style={tw`flex-1 bg-gray-200`}>
+            <Animated.Image
+                source={require('../../../assets/filter-loading-overlay.png')}
+                style={[tw`w-full h-full`, animatedStyle]}
+                resizeMode="cover"
+            />
+        </View>
+    );
+};
+
