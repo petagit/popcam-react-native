@@ -217,6 +217,9 @@ function AuthenticatedApp(): React.JSX.Element {
             component={NanoBananaResultScreen}
             options={{
               title: 'Nano Banana Result',
+              headerShown: false,
+              // @ts-ignore
+              animationEnabled: false,
             }}
           />
           <Stack.Screen

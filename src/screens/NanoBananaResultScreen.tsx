@@ -163,7 +163,9 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
       );
 
       if (result) {
-        setResultUri(result);
+        // Save to local file immediately to avoid passing huge Base64 strings around
+        const localUri = await imageUtils.saveImageLocally(result);
+        setResultUri(localUri);
 
         // Deduct credit
         try {
@@ -175,13 +177,13 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
         }
 
         const savedRecord = await storageService.saveAnalysis(user.id, {
-          imageUri: result,
+          imageUri: localUri,
           originalUri: referenceImageUri,
           description: presetTitle,
           timestamp: new Date(),
           tags: ['NanoBanana', presetTitle],
           hasInfographic: true,
-          infographicUri: result
+          infographicUri: localUri
         });
 
         console.log('Saved generation record:', savedRecord?.id);
@@ -272,12 +274,11 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
         <ScrollView contentContainerStyle={tw`flex-grow px-0 pt-0 pb-10`}>
           {/* Main Image Area */}
           <View style={[tw`w-full bg-gray-100 relative`, { height: Dimensions.get('window').height * 0.65 }]}>
-            {/* Loading Overlay */}
-            <LoadingOverlay visible={isLoading} />
 
-            {resultUri ? (
+
+            {resultUri || referenceImageUri ? (
               <Image
-                source={{ uri: resultUri }}
+                source={{ uri: (resultUri || referenceImageUri) ?? undefined }}
                 style={tw`w-full h-full`}
                 resizeMode="cover"
               />
@@ -379,6 +380,13 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
             </View>
           </View>
         </Modal>
+
+        {/* Loading Overlay (Non-Modal, Absolute) */}
+        {isLoading && (
+          <View style={[tw`absolute inset-0 z-50`, { width: Dimensions.get('window').width, height: Dimensions.get('window').height }]}>
+            <LoadingOverlay visible={isLoading} useModal={false} />
+          </View>
+        )}
 
       </SafeAreaView>
     </AppBackground>

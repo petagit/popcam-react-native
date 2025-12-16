@@ -38,3 +38,11 @@ build and submit
    npm run submit:ios
 
    npm run build-and-submit:ios
+
+
+
+
+
+git add .
+git commit -m"credit not working, overlay not working"
+git push
