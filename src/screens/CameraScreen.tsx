@@ -70,16 +70,22 @@ export default function CameraScreen(): React.JSX.Element {
 
   // Onboarding Target Registration
   useEffect(() => {
+    console.log('[CameraScreen Debug] Onboarding Effect triggered. isActive:', isActive);
     if (!isActive) return;
 
     const measureAndRegister = (ref: React.RefObject<any>, step: string) => {
       // Small timeout to ensure layout is ready
       setTimeout(() => {
-        ref.current?.measureInWindow((x: number, y: number, width: number, height: number) => {
-          if (width > 0 && height > 0) {
-            registerTarget(step as any, { x, y, width, height });
-          }
-        });
+        if (ref.current) {
+          ref.current.measureInWindow((x: number, y: number, width: number, height: number) => {
+            console.log(`[CameraScreen Debug] Measured ${step}:`, { x, y, width, height });
+            if (width > 0 && height > 0) {
+              registerTarget(step as any, { x, y, width, height });
+            }
+          });
+        } else {
+          console.log(`[CameraScreen Debug] Ref is null for ${step}`);
+        }
       }, 100);
     };
 

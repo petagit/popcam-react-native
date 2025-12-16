@@ -30,7 +30,7 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
     const startOnboarding = useCallback(() => {
         setIsActive(true);
         setCurrentStep('NANO_BANANA_BUTTON');
-        console.log('[Onboarding] Started');
+        console.log('[Onboarding] Started - isActive set to true, step set to NANO_BANANA_BUTTON');
     }, []);
 
     const stopOnboarding = useCallback(() => {

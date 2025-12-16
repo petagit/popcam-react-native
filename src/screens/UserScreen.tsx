@@ -27,6 +27,7 @@ import BackButton from '../components/buttons/BackButton';
 import AppBackground from '../components/AppBackground';
 import { BlurView } from 'expo-blur';
 import { colors, spacing, shadows } from '../styles/sharedStyles';
+import { useOnboarding } from '../features/onboarding/OnboardingContext';
 
 
 type MaterialIconName = keyof typeof MaterialIcons.glyphMap;
@@ -34,7 +35,7 @@ type MaterialIconName = keyof typeof MaterialIcons.glyphMap;
 interface QuickAction {
   id: string;
   title: string;
-  subtitle: string;
+  // subtitle removed
   icon: MaterialIconName;
   onPress: () => void;
   accentColor: string;
@@ -114,7 +115,6 @@ export default function UserScreen(): React.JSX.Element {
     {
       id: 'tutorial',
       title: 'Tutorial',
-      subtitle: 'How to use',
       icon: 'school',
       onPress: handleTutorialPress,
       accentColor: '#059669', // emerald-600
@@ -123,8 +123,7 @@ export default function UserScreen(): React.JSX.Element {
     },
     {
       id: 'nano-banana',
-      title: 'Nano Banana',
-      subtitle: 'AI Filters',
+      title: 'AI Filters',
       icon: 'auto-fix-high', // Magic icon representation
       onPress: handleNanoBananaPress,
       accentColor: '#9333ea', // purple-600
@@ -133,8 +132,7 @@ export default function UserScreen(): React.JSX.Element {
     },
     {
       id: 'camera',
-      title: 'Back to PopCam',
-      subtitle: 'Take photos',
+      title: 'Camera',
       icon: 'camera-alt',
       onPress: handleCameraPress,
       accentColor: '#ea580c', // orange-600
@@ -144,7 +142,6 @@ export default function UserScreen(): React.JSX.Element {
     {
       id: 'gallery',
       title: 'Gallery',
-      subtitle: 'View photos',
       icon: 'collections',
       onPress: handleGalleryPress,
       accentColor: '#2563eb',
@@ -264,19 +261,11 @@ export default function UserScreen(): React.JSX.Element {
                       <MaterialIcons name={action.icon} size={22} color={action.accentColor} />
                     </View>
                     <Text style={{
-                      fontSize: 18,
+                      fontSize: 15,
                       fontWeight: '600',
                       color: colors.text.primary,
                       textAlign: 'center'
-                    }}>{action.title}</Text>
-                    <Text style={{
-                      fontSize: 14,
-                      color: colors.text.secondary,
-                      marginTop: 4,
-                      textAlign: 'center'
-                    }} numberOfLines={2}>
-                      {action.subtitle}
-                    </Text>
+                    }} numberOfLines={1}>{action.title}</Text>
                   </View>
                 </TouchableOpacity>
               </View>
