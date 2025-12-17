@@ -69,31 +69,20 @@ export default function CameraScreen(): React.JSX.Element {
   }, []);
 
   // Onboarding Target Registration
-  useEffect(() => {
-    console.log('[CameraScreen Debug] Onboarding Effect triggered. isActive:', isActive);
+  const measureAndRegister = useCallback((ref: React.RefObject<any>, step: string) => {
     if (!isActive) return;
 
-    const measureAndRegister = (ref: React.RefObject<any>, step: string) => {
-      // Small timeout to ensure layout is ready
-      setTimeout(() => {
-        if (ref.current) {
-          ref.current.measureInWindow((x: number, y: number, width: number, height: number) => {
-            console.log(`[CameraScreen Debug] Measured ${step}:`, { x, y, width, height });
-            if (width > 0 && height > 0) {
-              registerTarget(step as any, { x, y, width, height });
-            }
-          });
-        } else {
-          console.log(`[CameraScreen Debug] Ref is null for ${step}`);
-        }
-      }, 100);
-    };
-
-    // Register ALL targets if available, regardless of currentStep
-    // This allows pre-registration so transitions flow smoothly
-    measureAndRegister(nanoButtonRef, 'NANO_BANANA_BUTTON');
-    measureAndRegister(shutterButtonRef, 'TAKE_PICTURE');
-  }, [isActive]);
+    // Use interaction manager or timeout to ensure native view is ready for measurement
+    setTimeout(() => {
+      if (ref.current) {
+        ref.current.measureInWindow((x: number, y: number, width: number, height: number) => {
+          if (width > 0 && height > 0) {
+            registerTarget(step as any, { x, y, width, height });
+          }
+        });
+      }
+    }, 100);
+  }, [isActive, registerTarget]);
 
   // Monitor Device Orientation
   const [deviceOrientation, setDeviceOrientation] = useState<number>(0);
@@ -533,7 +522,11 @@ export default function CameraScreen(): React.JSX.Element {
           )}
         </GlassButton>
 
-        <View ref={shutterButtonRef} collapsable={false}>
+        <View
+          ref={shutterButtonRef}
+          collapsable={false}
+          onLayout={() => measureAndRegister(shutterButtonRef, 'TAKE_PICTURE')}
+        >
           <TouchableOpacity onPress={takePicture} disabled={isCapturing} activeOpacity={0.9}>
             <BlurView
               intensity={35}
@@ -552,7 +545,11 @@ export default function CameraScreen(): React.JSX.Element {
         </View>
 
         <View style={tw`flex-row items-center`}>
-          <View ref={nanoButtonRef} collapsable={false}>
+          <View
+            ref={nanoButtonRef}
+            collapsable={false}
+            onLayout={() => measureAndRegister(nanoButtonRef, 'NANO_BANANA_BUTTON')}
+          >
             <GlassButton
               size={64}
               onPress={() => {

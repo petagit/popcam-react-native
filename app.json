@@ -2,7 +2,7 @@
   "expo": {
     "name": "PopCam",
     "slug": "popcam-app",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./app-logo.png",
     "userInterfaceStyle": "light",
