@@ -7,9 +7,10 @@ export const API_CONFIG = {
 
 export const NANO_BANANA_API_CONFIG = {
   BASE_URLS: [
+    process.env.EXPO_PUBLIC_NANO_BANANA_API_URL || '',
     'https://generativelanguage.googleapis.com/v1beta',
     'https://generativeai.googleapis.com/v1beta',
-  ],
+  ].filter(url => url.length > 0),
   DEFAULT_MODEL: 'gemini-3-pro-image-preview',
   FALLBACK_MODELS: [
     'gemini-2.5-flash-image',

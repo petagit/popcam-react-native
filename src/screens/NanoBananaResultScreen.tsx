@@ -30,6 +30,7 @@ import { supabaseService } from '../services/supabaseService';
 import { Toast } from '../components/Toast';
 import { captureRef } from 'react-native-view-shot';
 import { BlurView } from 'expo-blur';
+import { ErrorPopup } from '../components/messagpopup/ErrorPopup';
 
 
 type NanoBananaResultNavigationProp = StackNavigationProp<RootStackParamList, 'NanoBananaResult'>;
@@ -50,6 +51,7 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
   const [imageSize, setImageSize] = useState<{ width: number; height: number }>({ width: 1024, height: 1024 });
+  const [showNetworkErrorPopup, setShowNetworkErrorPopup] = useState(false);
 
   const hasStartedGeneration = useRef<boolean>(false);
   const hasAutoSaved = useRef<boolean>(false);
@@ -321,10 +323,7 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
 
     } catch (error) {
       console.error('[NanoBanana] Generation failed with error:', error);
-      Alert.alert('Generation Failed', 'Could not generate image. You can try again or go back.', [
-        { text: 'Try Again', onPress: () => generateImage() },
-        { text: 'Cancel', style: 'cancel', onPress: () => navigation.goBack() }
-      ]);
+      setShowNetworkErrorPopup(true);
     } finally {
       setIsGenerating(false);
     }
@@ -611,6 +610,18 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
           message={toastMessage}
           type={toastType}
           onDismiss={() => setToastVisible(false)}
+        />
+
+        <ErrorPopup
+          visible={showNetworkErrorPopup}
+          onRetry={() => {
+            setShowNetworkErrorPopup(false);
+            generateImage();
+          }}
+          onCancel={() => {
+            setShowNetworkErrorPopup(false);
+            navigation.goBack();
+          }}
         />
       </View>
     </AppBackground>
