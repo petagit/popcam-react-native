@@ -32,6 +32,7 @@ import NanoBananaScreen from './src/screens/NanoBananaScreen';
 import NanoBananaResultScreen from './src/screens/NanoBananaResultScreen';
 
 import PurchaseCreditsScreen from './src/screens/PurchaseCreditsScreen';
+import { DebugOverlay } from './src/components/DebugOverlay';
 
 const Stack = createStackNavigator<RootStackParamList>();
 
@@ -233,6 +234,9 @@ function AuthenticatedApp(): React.JSX.Element {
 
         {/* Global Onboarding Overlay */}
         <OnboardingOverlay />
+
+        {/* Debug Overlay Restricted to Admin */}
+        <DebugOverlay />
       </NavigationContainer>
     </OnboardingProvider>
   );

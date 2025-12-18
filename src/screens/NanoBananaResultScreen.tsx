@@ -49,6 +49,7 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
+  const [imageSize, setImageSize] = useState<{ width: number; height: number }>({ width: 1024, height: 1024 });
 
   const hasStartedGeneration = useRef<boolean>(false);
   const hasAutoSaved = useRef<boolean>(false);
@@ -70,6 +71,19 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
     }
     return () => clearInterval(interval);
   }, [isGenerating]);
+
+  useEffect(() => {
+    if (resultUri) {
+      Image.getSize(resultUri, (width, height) => {
+        console.log('[NanoBanana] Got image size:', width, height);
+        setImageSize({ width, height });
+      }, (error) => {
+        console.warn('[NanoBanana] Failed to get image size:', error);
+      });
+    }
+  }, [resultUri]);
+
+
 
 
 
@@ -505,13 +519,14 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
             position: 'absolute',
             top: -9999,
             left: -9999,
-            width: 1024, // Assuming standard generation size, or get from layout
-            height: 1024,
+            width: imageSize.width,
+            height: imageSize.height,
+
           }}
         >
           {/* Only render if we have a result uri to capture */}
           {resultUri && (
-            <View style={{ width: 1024, height: 1024, position: 'relative' }}>
+            <View style={{ width: imageSize.width, height: imageSize.height, position: 'relative' }}>
               <Image source={{ uri: resultUri }} style={{ width: '100%', height: '100%' }} />
               <View style={{
                 position: 'absolute',
@@ -528,47 +543,48 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
           )}
         </View>
 
-        {/* Footer Controls */}
-        <SafeAreaView style={tw`bg-white border-t border-gray-200`}>
-          <View style={tw`px-5 py-4`}>
+        {/* Footer Controls - Floating above image */}
+        <SafeAreaView style={tw`absolute bottom-0 left-0 right-0 z-10`} pointerEvents="box-none">
+          <BlurView intensity={30} tint="dark" style={tw`absolute inset-0`} />
+          <View style={tw`px-5 pb-8 pt-4 bg-black/20`}>
             {/* Custom Prompt Display (Compact) */}
             {(presetId === 'custom' || customPrompt) && (
               <View style={tw`mb-4`}>
-                <Text numberOfLines={1} style={tw`text-xs text-gray-500 text-center`}>
-                  Used: <Text style={tw`italic text-gray-800`}>{customPrompt || selectedPreset?.prompt}</Text>
+                <Text numberOfLines={1} style={tw`text-xs text-white/60 text-center`}>
+                  Used: <Text style={tw`italic text-white/90`}>{customPrompt || selectedPreset?.prompt}</Text>
                 </Text>
               </View>
             )}
 
             <View style={tw`flex-row justify-between mb-3`}>
               <TouchableOpacity
-                style={[tw`flex-1 py-3 rounded-xl mr-2 items-center`, isGenerating ? tw`bg-gray-300` : tw`bg-blue-500`]}
+                style={[tw`flex-1 py-3.5 rounded-2xl mr-2 items-center shadow-lg`, isGenerating ? tw`bg-gray-600` : tw`bg-blue-600`]}
                 onPress={handleShare}
                 disabled={isGenerating || !resultUri}
               >
-                <Text style={tw`text-white font-semibold`}>Share</Text>
+                <Text style={tw`text-white font-bold tracking-wide`}>Share</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={tw`flex-1 bg-green-500 py-3 rounded-xl ml-2 items-center`}
+                style={tw`flex-1 bg-green-600 py-3.5 rounded-2xl ml-2 items-center shadow-lg`}
                 onPress={handleSaveToCameraRoll}
                 disabled={isSaving}
               >
                 {isSaving ? (
                   <View style={tw`flex-row items-center`}>
                     <ActivityIndicator color="#fff" size="small" style={tw`mr-2`} />
-                    <Text style={tw`text-white font-semibold`}>Saving…</Text>
+                    <Text style={tw`text-white font-bold tracking-wide`}>Saving…</Text>
                   </View>
                 ) : (
-                  <Text style={tw`text-white font-semibold`}>Save</Text>
+                  <Text style={tw`text-white font-bold tracking-wide`}>Save</Text>
                 )}
               </TouchableOpacity>
             </View>
 
             <TouchableOpacity
-              style={tw`py-3 rounded-xl border border-black bg-black items-center`}
+              style={tw`py-3.5 rounded-2xl bg-white/10 border border-white/20 items-center shadow-lg`}
               onPress={handleMakeAnother}
             >
-              <Text style={tw`text-white font-semibold`}>Make Another</Text>
+              <Text style={tw`text-white font-bold tracking-wide`}>Make Another</Text>
             </TouchableOpacity>
           </View>
         </SafeAreaView>

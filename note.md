@@ -25,7 +25,7 @@ npm run ios -- --device
 
 
 git add .
-git commit -m"fixing buttons"
+git commit -m"1.0.4"
 git push
 
 npx eas build --platform ios --profile production
@@ -60,8 +60,8 @@ build and submit
    cd "/Users/fengzhiping/popcam react native" && npm run submit:ios
 
 
-   npm run build:ios
-   npm run submit:ios
+npm run build:ios
+npm run submit:ios
 
    npm run build-and-submit:ios
 
