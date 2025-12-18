@@ -144,27 +144,11 @@ export default function GalleryScreen(): React.JSX.Element {
         }
       }
 
-      const savedAnalyses: ImageAnalysis[] = await storageService.getAnalyses(user?.id);
+      const resolvedAnalyses: ImageAnalysis[] = await storageService.getResolvedAnalyses(user?.id);
       // Filter to only show analyses with AI generations
-      const infographicAnalyses: ImageAnalysis[] = savedAnalyses.filter(
+      const infographicAnalyses: ImageAnalysis[] = resolvedAnalyses.filter(
         (analysis: ImageAnalysis) => analysis.hasInfographic && analysis.infographicUri
       );
-      // Resolve URLs for R2 keys
-      const { r2Service } = require('../services/r2Service');
-      const resolvedAnalyses = await Promise.all(infographicAnalyses.map(async (a) => {
-        let resolved = { ...a };
-        // Resolve main image URI if it looks like a key (not http/file)
-        if (a.imageUri && !a.imageUri.startsWith('http') && !a.imageUri.startsWith('file://')) {
-          const url = await r2Service.resolveUrl(a.imageUri);
-          if (url) resolved.imageUri = url;
-        }
-        // Resolve infographic URI
-        if (a.infographicUri && !a.infographicUri.startsWith('http') && !a.infographicUri.startsWith('file://')) {
-          const url = await r2Service.resolveUrl(a.infographicUri);
-          if (url) resolved.infographicUri = url;
-        }
-        return resolved;
-      }));
 
       const grouped: GroupedAnalysis[] = groupAnalysesByDate(resolvedAnalyses);
       const flatData: ListItem[] = createFlatListData(grouped);

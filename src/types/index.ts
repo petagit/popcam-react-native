@@ -64,6 +64,7 @@ export type RootStackParamList = {
     presetTitle: string;
     autoGenerate?: boolean;
     customPrompt?: string;
+    debugLoading?: boolean;
   };
   PurchaseCredits: undefined;
 };

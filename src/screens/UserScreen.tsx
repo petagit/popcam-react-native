@@ -65,7 +65,7 @@ export default function UserScreen(): React.JSX.Element {
         // Automatically try to restore missing items from cloud history
         await storageService.syncCloudHistory(user.id);
       }
-      const analyses: ImageAnalysis[] = await storageService.getAnalyses(user?.id);
+      const analyses: ImageAnalysis[] = await storageService.getResolvedAnalyses(user?.id);
       setRecentGenerations(analyses.slice(0, 6));
     } catch (error) {
       console.error('Error loading generations:', error);

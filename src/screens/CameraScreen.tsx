@@ -22,6 +22,7 @@ import { storageService } from '../services/storageService';
 import { useCredits } from '../hooks/useCredits';
 import GlassButton from '../components/buttons/GlassButton';
 import CreditsButton from '../components/buttons/CreditsButton';
+import GalleryThumbnailButton from '../components/buttons/GalleryThumbnailButton';
 import { MaterialIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import LoadingOverlay from '../components/LoadingOverlay';
@@ -53,18 +54,18 @@ export default function CameraScreen(): React.JSX.Element {
   const nanoButtonRef = useRef<View>(null);
   const shutterButtonRef = useRef<View>(null);
   const [isCapturing, setIsCapturing] = useState<boolean>(false);
-  const [lastGalleryImage, setLastGalleryImage] = useState<string | null>(null);
   const [currentPresetTitle, setCurrentPresetTitle] = useState<string>('Nano Banana');
   const [currentPresetId, setCurrentPresetId] = useState<string>('nano-banana-v1');
   const [currentCustomPromptText, setCurrentCustomPromptText] = useState<string | undefined>(undefined);
   const [zoom, setZoom] = useState<number>(0);
+  const [availableLenses, setAvailableLenses] = useState<string[]>([]);
+  const [selectedLens, setSelectedLens] = useState<string>('builtInWideAngleCamera');
 
   const { width } = useWindowDimensions();
   // const camHeight = width * (4 / 3); // Removed fixed 4:3 ratio to allow full screen
 
   useEffect(() => {
     requestPermissions();
-    loadLastGalleryImage();
     updateCurrentPreset();
   }, []);
 
@@ -132,7 +133,6 @@ export default function CameraScreen(): React.JSX.Element {
 
   useFocusEffect(
     useCallback(() => {
-      loadLastGalleryImage();
       updateCurrentPreset();
     }, [user])
   );
@@ -223,6 +223,13 @@ export default function CameraScreen(): React.JSX.Element {
           'PopCam needs access to your photo library to import images for Nano Banana.',
           [{ text: 'OK' }]
         );
+      }
+
+      // Fetch available lenses for iOS
+      if (cameraRef.current?.getAvailableLensesAsync) {
+        const lenses = await cameraRef.current.getAvailableLensesAsync();
+        setAvailableLenses(lenses);
+        console.log('Available lenses:', lenses);
       }
     } catch (error) {
       console.error('Error requesting permissions:', error);
@@ -405,23 +412,6 @@ export default function CameraScreen(): React.JSX.Element {
     setCameraType((current) => (current === 'back' ? 'front' : 'back'));
   };
 
-  const loadLastGalleryImage = async (): Promise<void> => {
-    try {
-      const analyses: ImageAnalysis[] = await storageService.getAnalyses(user?.id);
-      const infographicAnalyses: ImageAnalysis[] = analyses.filter(
-        (analysis: ImageAnalysis) => analysis.hasInfographic && analysis.infographicUri
-      );
-
-      if (infographicAnalyses.length > 0) {
-        setLastGalleryImage(infographicAnalyses[0].infographicUri!);
-      } else {
-        setLastGalleryImage(null);
-      }
-    } catch (error) {
-      console.error('Error loading last gallery image:', error);
-      setLastGalleryImage(null);
-    }
-  };
 
   if (hasPermission === null) {
     return (
@@ -457,28 +447,45 @@ export default function CameraScreen(): React.JSX.Element {
           style={tw`flex-1`}
           facing={cameraType}
           zoom={zoom}
+          selectedLens={selectedLens as any}
         />
 
         {/* Zoom Controls */}
         <View style={tw`absolute bottom-44 left-0 right-0 flex-row justify-center items-center gap-4`}>
-          {[0, 0.1, 0.2].map((z, index) => {
-            const label = index === 0 ? '1x' : index === 1 ? '2x' : '3x';
-            const isSelected = zoom === z;
-            return (
-              <TouchableOpacity
-                key={label}
-                onPress={() => setZoom(z)}
-                style={[
-                  tw`w-8 h-8 rounded-full items-center justify-center`,
-                  { backgroundColor: isSelected ? '#EAB308' : (isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)') }
-                ]}
-              >
-                <Text style={[tw`text-xs font-bold`, { color: isSelected ? 'black' : (isDark ? 'black' : 'white') }]}>
-                  {label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+          {(() => {
+            const hasUltraWide = availableLenses.includes('builtInUltraWideCamera');
+            const zoomOptions = hasUltraWide ? [0.5, 1, 2, 3] : [1, 2, 3];
+
+            return zoomOptions.map((z) => {
+              const label = z === 0.5 ? '0.5' : z === 1 ? '1x' : z === 2 ? '2x' : '3x';
+              const isSelected = z === 0.5 ? selectedLens === 'builtInUltraWideCamera' : (selectedLens === 'builtInWideAngleCamera' && (z === 1 ? zoom === 0 : z === 2 ? zoom === 0.1 : zoom === 0.2));
+
+              return (
+                <TouchableOpacity
+                  key={label}
+                  onPress={() => {
+                    if (z === 0.5) {
+                      setSelectedLens('builtInUltraWideCamera');
+                      setZoom(0);
+                    } else {
+                      setSelectedLens('builtInWideAngleCamera');
+                      if (z === 1) setZoom(0);
+                      if (z === 2) setZoom(0.1);
+                      if (z === 3) setZoom(0.2);
+                    }
+                  }}
+                  style={[
+                    tw`w-8 h-8 rounded-full items-center justify-center`,
+                    { backgroundColor: isSelected ? '#EAB308' : (isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)') }
+                  ]}
+                >
+                  <Text style={[tw`text-xs font-bold`, { color: isSelected ? 'black' : (isDark ? 'black' : 'white') }]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            });
+          })()}
         </View>
       </View>
 
@@ -510,17 +517,10 @@ export default function CameraScreen(): React.JSX.Element {
 
 
       <View style={tw`absolute bottom-12 left-0 right-0 px-6 flex-row justify-between items-center z-10`}>
-        <GlassButton size={64} onPress={() => navigation.navigate('Gallery')} tint={uiTint}>
-          {lastGalleryImage ? (
-            <Image
-              source={{ uri: lastGalleryImage }}
-              style={[tw`rounded-full`, { width: 52, height: 52 }]}
-              resizeMode="cover"
-            />
-          ) : (
-            <MaterialIcons name="auto-awesome" size={28} color={iconColor} />
-          )}
-        </GlassButton>
+        <GalleryThumbnailButton
+          onPress={() => navigation.navigate('Gallery')}
+          isDark={isDark}
+        />
 
         <View
           ref={shutterButtonRef}

@@ -63,7 +63,7 @@ build and submit
 npm run build:ios
 npm run submit:ios
 
-   npm run build-and-submit:ios
+npm run build-and-submit:ios
 
 
 
@@ -73,3 +73,6 @@ git add .
 git commit -m"credit fixed, overlay fixed"
 git push
 
+
+
+npm install -g eas-cli

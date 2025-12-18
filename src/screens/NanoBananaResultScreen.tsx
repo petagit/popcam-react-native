@@ -39,12 +39,12 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
   const navigation = useNavigation<NanoBananaResultNavigationProp>();
   const route = useRoute<NanoBananaResultRouteProp>();
 
-  const { resultUri: initialResultUri, referenceImageUri, presetTitle, presetId, autoGenerate, customPrompt } = route.params;
+  const { resultUri: initialResultUri, referenceImageUri, presetTitle, presetId, autoGenerate, customPrompt, debugLoading } = route.params;
 
   const [resultUri, setResultUri] = useState<string | undefined>(initialResultUri);
   const [showAfter, setShowAfter] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [isGenerating, setIsGenerating] = useState<boolean>(!!autoGenerate);
+  const [isGenerating, setIsGenerating] = useState<boolean>(!!autoGenerate || !!debugLoading);
   const [progress, setProgress] = useState<number>(0);
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -57,15 +57,19 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isGenerating) {
-      setProgress(0);
+      if (!debugLoading) setProgress(0);
       interval = setInterval(() => {
         setProgress((prev) => {
+          if (debugLoading) {
+            // Loop progress for debugging
+            return (prev + 1) % 101;
+          }
           if (prev >= 90) return prev; // Stall at 90% until done
           // Slow down as we get closer to 90
           const increment = prev < 50 ? 5 : prev < 70 ? 2 : 1;
           return prev + increment;
         });
-      }, 200);
+      }, debugLoading ? 50 : 200);
     } else {
       setProgress(100);
     }
@@ -545,46 +549,59 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
 
         {/* Footer Controls - Floating above image */}
         <SafeAreaView style={tw`absolute bottom-0 left-0 right-0 z-10`} pointerEvents="box-none">
-          <BlurView intensity={30} tint="dark" style={tw`absolute inset-0`} />
-          <View style={tw`px-5 pb-8 pt-4 bg-black/20`}>
+          <View style={tw`px-5 pb-8 pt-4`}>
             {/* Custom Prompt Display (Compact) */}
             {(presetId === 'custom' || customPrompt) && (
               <View style={tw`mb-4`}>
-                <Text numberOfLines={1} style={tw`text-xs text-white/60 text-center`}>
-                  Used: <Text style={tw`italic text-white/90`}>{customPrompt || selectedPreset?.prompt}</Text>
-                </Text>
+                <BlurView intensity={20} tint="dark" style={tw`rounded-full px-3 py-1 self-center overflow-hidden`}>
+                  <Text numberOfLines={1} style={tw`text-xs text-white/70 text-center`}>
+                    Used: <Text style={tw`italic text-white/90`}>{customPrompt || selectedPreset?.prompt}</Text>
+                  </Text>
+                </BlurView>
               </View>
             )}
 
-            <View style={tw`flex-row justify-between mb-3`}>
+            <View style={tw`flex-row justify-between mb-4`}>
               <TouchableOpacity
-                style={[tw`flex-1 py-3.5 rounded-2xl mr-2 items-center shadow-lg`, isGenerating ? tw`bg-gray-600` : tw`bg-blue-600`]}
+                style={tw`flex-1 h-14 rounded-2xl mr-2 overflow-hidden shadow-lg`}
                 onPress={handleShare}
                 disabled={isGenerating || !resultUri}
+                activeOpacity={0.8}
               >
-                <Text style={tw`text-white font-bold tracking-wide`}>Share</Text>
+                <BlurView intensity={35} tint="dark" style={tw`flex-1 flex-row items-center justify-center bg-white/5 border border-white/10`}>
+                  <MaterialIcons name="share" size={20} color="#fff" style={tw`mr-2`} />
+                  <Text style={tw`text-white font-bold tracking-wide`}>Share</Text>
+                </BlurView>
               </TouchableOpacity>
+
               <TouchableOpacity
-                style={tw`flex-1 bg-green-600 py-3.5 rounded-2xl ml-2 items-center shadow-lg`}
+                style={tw`flex-1 h-14 rounded-2xl ml-2 overflow-hidden shadow-lg`}
                 onPress={handleSaveToCameraRoll}
-                disabled={isSaving}
+                disabled={isSaving || isGenerating || !resultUri}
+                activeOpacity={0.8}
               >
-                {isSaving ? (
-                  <View style={tw`flex-row items-center`}>
-                    <ActivityIndicator color="#fff" size="small" style={tw`mr-2`} />
-                    <Text style={tw`text-white font-bold tracking-wide`}>Saving…</Text>
-                  </View>
-                ) : (
-                  <Text style={tw`text-white font-bold tracking-wide`}>Save</Text>
-                )}
+                <BlurView intensity={35} tint="dark" style={tw`flex-1 flex-row items-center justify-center bg-white/5 border border-white/10`}>
+                  {isSaving ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <>
+                      <MaterialIcons name="get-app" size={22} color="#fff" style={tw`mr-2`} />
+                      <Text style={tw`text-white font-bold tracking-wide`}>Save</Text>
+                    </>
+                  )}
+                </BlurView>
               </TouchableOpacity>
             </View>
 
             <TouchableOpacity
-              style={tw`py-3.5 rounded-2xl bg-white/10 border border-white/20 items-center shadow-lg`}
+              style={tw`h-14 rounded-2xl overflow-hidden shadow-lg`}
               onPress={handleMakeAnother}
+              activeOpacity={0.8}
             >
-              <Text style={tw`text-white font-bold tracking-wide`}>Make Another</Text>
+              <BlurView intensity={35} tint="dark" style={tw`flex-1 flex-row items-center justify-center bg-white/5 border border-white/10`}>
+                <MaterialIcons name="refresh" size={22} color="#fff" style={tw`mr-2`} />
+                <Text style={tw`text-white font-bold tracking-wide`}>Make Another</Text>
+              </BlurView>
             </TouchableOpacity>
           </View>
         </SafeAreaView>

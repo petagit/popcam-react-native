@@ -40,7 +40,7 @@ export default function SettingsScreen() {
     autoSave: true,
     highQuality: false,
     showTags: true,
-    cloudStorage: false,
+    cloudStorage: true,
   });
   const [isDeletingAccount, setIsDeletingAccount] = useState<boolean>(false);
 

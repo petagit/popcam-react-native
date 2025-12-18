@@ -26,6 +26,7 @@ const SCREENS: { name: keyof RootStackParamList; label: string }[] = [
     { name: 'Settings', label: 'Settings' },
     { name: 'NanoBanana', label: 'Nano Banana' },
     { name: 'NanoBananaResult', label: 'NB Result' },
+    { name: 'NanoBananaResult', label: 'PREVIEW LOADING' },
     { name: 'PurchaseCredits', label: 'Credits' },
     { name: 'Splash', label: 'Splash' },
     { name: 'Landing', label: 'Landing' },
@@ -38,7 +39,7 @@ export const DebugOverlay = () => {
 
     // Check if user is the authorized debug user
     const isDebugUser = user?.emailAddresses.some(
-        (email) => email.emailAddress === DEBUG_EMAIL
+        (email) => email.emailAddress.toLowerCase() === DEBUG_EMAIL.toLowerCase()
     );
 
     if (!isDebugUser) return null;
@@ -60,8 +61,17 @@ export const DebugOverlay = () => {
                                         key={screen.name}
                                         style={tw`bg-white/20 px-4 py-2 rounded-full border border-white/30`}
                                         onPress={() => {
-                                            // @ts-ignore - Some screens might require params but we're debugging
-                                            navigation.navigate(screen.name);
+                                            if (screen.label === 'PREVIEW LOADING') {
+                                                navigation.navigate('NanoBananaResult', {
+                                                    presetTitle: 'Debug Promo',
+                                                    presetId: 'debug',
+                                                    debugLoading: true,
+                                                    referenceImageUri: 'https://images.unsplash.com/photo-1550258114-b83030364969?auto=format&fit=crop&q=80&w=1000'
+                                                });
+                                            } else {
+                                                // @ts-ignore - Some screens might require params but we're debugging
+                                                navigation.navigate(screen.name);
+                                            }
                                             setIsDebugOpen(false);
                                         }}
                                     >

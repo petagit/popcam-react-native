@@ -83,26 +83,49 @@ class StorageService {
   async getAnalyses(userId?: string): Promise<ImageAnalysis[]> {
     try {
       const storageKey: string = this.getUserAnalysesKey(userId);
-      const analysesJson: string | null = await AsyncStorage.getItem(storageKey);
-      if (!analysesJson) {
-        // If no user-specific analyses found, try to get global analyses for migration
-        if (userId) {
-          const globalAnalyses: ImageAnalysis[] = await this.getAnalyses();
-          // Filter global analyses for this user and migrate them
-          const userAnalyses: ImageAnalysis[] = globalAnalyses.filter(
-            (analysis: ImageAnalysis) => analysis.userId === userId
-          );
-          if (userAnalyses.length > 0) {
-            await this.saveAnalyses(userAnalyses, userId);
-            return userAnalyses;
+      const guestKey: string = STORAGE_KEYS.ANALYSES;
+
+      // 1. Check for possible migration first if we have a userId
+      if (userId) {
+        const guestJson = await AsyncStorage.getItem(guestKey);
+        if (guestJson) {
+          try {
+            const guestAnalyses: ImageAnalysis[] = JSON.parse(guestJson);
+            if (guestAnalyses.length > 0) {
+              console.log(`[Storage] Migrating ${guestAnalyses.length} guest items to user ${userId}`);
+              const userJson = await AsyncStorage.getItem(storageKey);
+              const userAnalyses: ImageAnalysis[] = userJson ? JSON.parse(userJson) : [];
+
+              // Merge (avoid duplicates by ID)
+              const existingIds = new Set(userAnalyses.map(a => a.id));
+              const newItems = guestAnalyses
+                .filter(a => !existingIds.has(a.id))
+                .map(a => ({ ...a, userId }));
+
+              if (newItems.length > 0) {
+                const merged = [...newItems, ...userAnalyses].slice(0, APP_CONFIG.MAX_ANALYSES_STORED);
+                await AsyncStorage.setItem(storageKey, JSON.stringify(merged));
+              }
+
+              // CRITICAL: Clear guest storage after migration to avoid re-migrating
+              await AsyncStorage.removeItem(guestKey);
+              console.log('[Storage] Migration complete. Guest storage cleared.');
+            }
+          } catch (migrateError) {
+            console.error('[Storage] Migration error:', migrateError);
           }
         }
+      }
+
+      // 2. Load the actual data for the current key
+      const analysesJson: string | null = await AsyncStorage.getItem(storageKey);
+      if (!analysesJson) {
         return [];
       }
 
       const analyses: ImageAnalysis[] = JSON.parse(analysesJson);
 
-      // Verification and Cleanup Logic
+      // 3. Verification and Cleanup Logic (NON-DESTRUCTIVE)
       const validatedAnalyses: ImageAnalysis[] = [];
       let hasChanges = false;
 
@@ -123,59 +146,81 @@ class StorageService {
 
         // Local file missing. Check for Cloud URL
         if (parsedAnalysis.cloudUrl) {
-          console.log(`[Storage] Local file missing for ${parsedAnalysis.id}, falling back to Cloud URL`);
+          console.log(`[Storage] Local file missing for ${parsedAnalysis.id}, attempting Cloud fallback`);
 
-          // Resolve the cloud URL (it might be a key needing signing)
-          const resolvedUrl = await r2Service.resolveUrl(parsedAnalysis.cloudUrl);
+          try {
+            // Resolve the cloud URL (it might be a key needing signing)
+            const resolvedUrl = await r2Service.resolveUrl(parsedAnalysis.cloudUrl);
 
-          if (resolvedUrl) {
-            validatedAnalyses.push({
-              ...parsedAnalysis,
-              imageUri: resolvedUrl,
-            });
-            hasChanges = true; // We updated the imageUri in memory (not persisted unless we save, but we don't save signed URLs to disk typically?)
-            // Actually, we shouldn't save the SIGNED url to disk as 'imageUri' because it expires.
-            // But 'getAnalyses' returns the runtime object.
-            // The cleanup logic below (lines 142) saves 'validatedAnalyses' to disk.
-            // IF we save the signed URL to disk, it will expire. 
-            // We should probably NOT mark 'hasChanges = true' if the only change is resolving the URL for display.
-            // BUT we are in the loop where we are building 'validatedAnalyses'.
-            // If we don't add it to validatedAnalyses, it gets dropped.
-            // If we do add it, it gets saved to disk if 'hasChanges' is true (triggered by other cleanups).
-
-            // CRITICAL: We should probably keep 'imageUri' as the key on disk if we can't verify it?
-            // Or better: Don't modify the object on disk, but modify the returned object.
-            // BUT 'validatedAnalyses' is used for BOTH return AND save.
-            // We need to separate them if we want ephemeral URLs.
-            // However, simpler fix for now: return the resolved URL. 
-            // If it gets saved to disk, it expires in 1 hour. Next load -> local file missing -> resolves again.
-            // This is acceptable overhead.
-            hasChanges = true;
-          } else {
-            // resolution failed (maybe key invalid?), treat as missing
-            console.warn(`[Storage] Cloud URL resolution failed for ${parsedAnalysis.id}`);
-            // If we want to be safe, maybe don't delete it yet? But logic implies cleanup.
-            // We'll treat it as lost if we can't resolve it.
-            hasChanges = true;
+            if (resolvedUrl) {
+              validatedAnalyses.push({
+                ...parsedAnalysis,
+                imageUri: resolvedUrl,
+              });
+              // We don't mark hasChanges = true for ephemeral URL resolution anymore
+              // to avoid constant re-saving of expiring URLs to disk.
+              continue;
+            }
+          } catch (r2Error) {
+            console.warn(`[Storage] Cloud resolution failed temporarily for ${parsedAnalysis.id}:`, r2Error);
           }
+
+          // SAFE FIX: If cloud resolution fails (network issue etc.), DO NOT delete the item.
+          // Keep it in the list so it can try again later.
+          validatedAnalyses.push(parsedAnalysis);
           continue;
         }
 
-        // No local file and no cloud URL -> Cleanup (Data lost/App deleted)
-        console.warn(`[Storage] Cleaning up invalid analysis ${parsedAnalysis.id} (no local file, no cloud backup)`);
+        // No local file and no cloud URL -> Cleanup (These are truly lost or internal temp files)
+        console.warn(`[Storage] Cleaning up invalid analysis ${parsedAnalysis.id} (metadata only, no source)`);
         hasChanges = true;
       }
 
-      // If we cleaned up or updated entries, save the new list to persist the fix
+      // Only save if we actually removed items (not just resolved URLs)
       if (hasChanges && validatedAnalyses.length !== analyses.length) {
-        // We defer saving slightly or just fire and forget to avoid blocking read too long? 
-        // Better to await to ensure consistency.
         this.saveAnalyses(validatedAnalyses, userId).catch(err => console.error('Error persisting cleanup:', err));
       }
 
       return validatedAnalyses;
     } catch (error) {
       console.error('Error loading analyses:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Fetches and resolves URIs for a user's analyses, ensuring cloud-only items have valid signed URLs.
+   */
+  async getResolvedAnalyses(userId?: string): Promise<ImageAnalysis[]> {
+    try {
+      const analyses: ImageAnalysis[] = await this.getAnalyses(userId);
+
+      const resolved = await Promise.all(analyses.map(async (analysis) => {
+        try {
+          const item = { ...analysis };
+
+          // Resolve main image URI if it looks like an R2 key (not http/file)
+          if (item.imageUri && !item.imageUri.startsWith('http') && !item.imageUri.startsWith('file://')) {
+            const url = await r2Service.resolveUrl(item.imageUri);
+            if (url) item.imageUri = url;
+          }
+
+          // Resolve infographic URI if it looks like an R2 key
+          if (item.infographicUri && !item.infographicUri.startsWith('http') && !item.infographicUri.startsWith('file://')) {
+            const url = await r2Service.resolveUrl(item.infographicUri);
+            if (url) item.infographicUri = url;
+          }
+
+          return item;
+        } catch (err) {
+          console.warn(`[StorageService] Failed to resolve URI for ${analysis.id}:`, err);
+          return analysis;
+        }
+      }));
+
+      return resolved;
+    } catch (error) {
+      console.error('[StorageService] Error in getResolvedAnalyses:', error);
       return [];
     }
   }
@@ -362,9 +407,14 @@ class StorageService {
     try {
       console.log('[StorageService] Syncing cloud history for:', userId);
       const cloudImages = await supabaseService.getGeneratedImages(userId, 50); // Get last 50
-      if (cloudImages.length === 0) return;
+      console.log(`[StorageService] Found ${cloudImages.length} items in cloud for user ${userId}`);
+      if (cloudImages.length === 0) {
+        console.log('[StorageService] No cloud history found.');
+        return;
+      }
 
       const localAnalyses = await this.getAnalyses(userId);
+      console.log(`[StorageService] Comparing with ${localAnalyses.length} local items`);
       const storageKey = `${STORAGE_KEYS.ANALYSES}_${userId}`;
       let hasChanges = false;
       const newAnalyses = [...localAnalyses];
@@ -461,7 +511,14 @@ class StorageService {
         : STORAGE_KEYS.USER_PREFERENCES;
 
       const preferencesJson: string | null = await AsyncStorage.getItem(storageKey);
-      return preferencesJson ? JSON.parse(preferencesJson) : {};
+      const preferences = preferencesJson ? JSON.parse(preferencesJson) : {};
+
+      // Default cloudStorage to true if not explicitly set
+      if (preferences.cloudStorage === undefined) {
+        preferences.cloudStorage = true;
+      }
+
+      return preferences;
     } catch (error) {
       console.error('Error loading preferences:', error);
       return {};
