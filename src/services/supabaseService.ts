@@ -281,7 +281,7 @@ class SupabaseService {
 
       console.log('[SupabaseService] fetch success. Count:', data?.length);
       // #region agent log
-      fetch('http://127.0.0.1:7244/ingest/7568f864-cfb0-4b28-aa9e-daea10a985f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'supabaseService.ts:getCustomPrompts',message:'Raw thumbnail URLs from DB',data:{count:data?.length,thumbnails:data?.slice(0,5).map((d: { id: string; thumbnail_url?: string })=>({id:d.id,url:d.thumbnail_url?.substring(0,60)}))},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'DB-Query'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7244/ingest/7568f864-cfb0-4b28-aa9e-daea10a985f3', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'supabaseService.ts:getCustomPrompts', message: 'Raw thumbnail URLs from DB', data: { count: data?.length, thumbnails: data?.slice(0, 5).map((d: { id: string; thumbnail_url?: string }) => ({ id: d.id, url: d.thumbnail_url?.substring(0, 60) })) }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'DB-Query' }) }).catch(() => { });
       // #endregion
       return data.map((item) => ({
         id: item.id,
@@ -403,9 +403,14 @@ class SupabaseService {
         });
 
       if (error) {
-        // If error is about missing column 'prompt', try without it
-        if (error.message?.includes('column "prompt" of relation "generated_images" does not exist')) {
-          console.warn('[SupabaseService] Prompt column missing, saving without prompt');
+        // Handle various error variants when 'prompt' column is missing or schema cache is stale
+        const isMissingColumn =
+          error.message?.includes('column "prompt" of relation "generated_images" does not exist') ||
+          error.code === 'PGRST204' || // PostgREST schema cache error
+          error.message?.includes("Could not find the 'prompt' column");
+
+        if (isMissingColumn) {
+          console.warn('[SupabaseService] Prompt column missing or schema stale, saving without prompt property');
           const { error: retryError } = await this.supabase
             .from('generated_images')
             .insert({
@@ -441,6 +446,8 @@ class SupabaseService {
         console.error('[SupabaseService] Error fetching generated images:', error);
         return [];
       }
+
+      console.log(`[SupabaseService] Successfully fetched ${data?.length || 0} images from cloud for user ${userId}`);
 
       return data || [];
     } catch (error) {

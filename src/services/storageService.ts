@@ -80,7 +80,7 @@ class StorageService {
     }
   }
 
-  async getAnalyses(userId?: string): Promise<ImageAnalysis[]> {
+  async getAnalyses(userId?: string, options: { skipVerification?: boolean } = {}): Promise<ImageAnalysis[]> {
     try {
       const storageKey: string = this.getUserAnalysesKey(userId);
       const guestKey: string = STORAGE_KEYS.ANALYSES;
@@ -124,59 +124,58 @@ class StorageService {
       }
 
       const analyses: ImageAnalysis[] = JSON.parse(analysesJson);
+      const items: ImageAnalysis[] = analyses.map(a => ({
+        ...a,
+        timestamp: new Date(a.timestamp),
+      }));
 
-      // 3. Verification and Cleanup Logic (NON-DESTRUCTIVE)
+      // 3. Optional: Logic to skip expensive file verification on every load
+      if (options.skipVerification) {
+        return items;
+      }
+
+      // 4. Verification and Cleanup Logic (PROACTIVE CLEANUP)
       const validatedAnalyses: ImageAnalysis[] = [];
       let hasChanges = false;
 
-      for (const analysis of analyses) {
-        // Parse date
-        const parsedAnalysis = {
-          ...analysis,
-          timestamp: new Date(analysis.timestamp),
-        };
-
+      for (const analysis of items) {
         // Check if local file exists
-        const { exists } = await imageUtils.verifyLocalImage(parsedAnalysis.imageUri);
+        const { exists } = await imageUtils.verifyLocalImage(analysis.imageUri);
 
         if (exists) {
-          validatedAnalyses.push(parsedAnalysis);
+          validatedAnalyses.push(analysis);
           continue;
         }
 
         // Local file missing. Check for Cloud URL
-        if (parsedAnalysis.cloudUrl) {
-          console.log(`[Storage] Local file missing for ${parsedAnalysis.id}, attempting Cloud fallback`);
+        if (analysis.cloudUrl) {
+          console.log(`[Storage] Local file missing for ${analysis.id}, attempting Cloud fallback`);
 
           try {
             // Resolve the cloud URL (it might be a key needing signing)
-            const resolvedUrl = await r2Service.resolveUrl(parsedAnalysis.cloudUrl);
+            const resolvedUrl = await r2Service.resolveUrl(analysis.cloudUrl);
 
             if (resolvedUrl) {
               validatedAnalyses.push({
-                ...parsedAnalysis,
+                ...analysis,
                 imageUri: resolvedUrl,
               });
-              // We don't mark hasChanges = true for ephemeral URL resolution anymore
-              // to avoid constant re-saving of expiring URLs to disk.
               continue;
             }
           } catch (r2Error) {
-            console.warn(`[Storage] Cloud resolution failed temporarily for ${parsedAnalysis.id}:`, r2Error);
+            console.warn(`[Storage] Cloud resolution failed temporarily for ${analysis.id}:`, r2Error);
           }
 
-          // SAFE FIX: If cloud resolution fails (network issue etc.), DO NOT delete the item.
-          // Keep it in the list so it can try again later.
-          validatedAnalyses.push(parsedAnalysis);
+          validatedAnalyses.push(analysis);
           continue;
         }
 
-        // No local file and no cloud URL -> Cleanup (These are truly lost or internal temp files)
-        console.warn(`[Storage] Cleaning up invalid analysis ${parsedAnalysis.id} (metadata only, no source)`);
+        // No local file and no cloud URL -> Cleanup
+        console.warn(`[Storage] Cleaning up invalid analysis ${analysis.id} (metadata only, no source)`);
         hasChanges = true;
       }
 
-      // Only save if we actually removed items (not just resolved URLs)
+      // Only save if we actually removed items
       if (hasChanges && validatedAnalyses.length !== analyses.length) {
         this.saveAnalyses(validatedAnalyses, userId).catch(err => console.error('Error persisting cleanup:', err));
       }
@@ -193,7 +192,8 @@ class StorageService {
    */
   async getResolvedAnalyses(userId?: string): Promise<ImageAnalysis[]> {
     try {
-      const analyses: ImageAnalysis[] = await this.getAnalyses(userId);
+      // Use skipVerification: true because we resolve manually here anyway
+      const analyses: ImageAnalysis[] = await this.getAnalyses(userId, { skipVerification: true });
 
       const resolved = await Promise.all(analyses.map(async (analysis) => {
         try {
@@ -413,7 +413,8 @@ class StorageService {
         return;
       }
 
-      const localAnalyses = await this.getAnalyses(userId);
+      // Skip verification when comparing for sync to make it fast
+      const localAnalyses = await this.getAnalyses(userId, { skipVerification: true });
       console.log(`[StorageService] Comparing with ${localAnalyses.length} local items`);
       const storageKey = `${STORAGE_KEYS.ANALYSES}_${userId}`;
       let hasChanges = false;

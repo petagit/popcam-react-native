@@ -53,6 +53,8 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
   const [imageSize, setImageSize] = useState<{ width: number; height: number }>({ width: 1024, height: 1024 });
   const [showNetworkErrorPopup, setShowNetworkErrorPopup] = useState(false);
+  const [gifMode, setGifMode] = useState<boolean>(false);
+
 
   const hasStartedGeneration = useRef<boolean>(false);
   const hasAutoSaved = useRef<boolean>(false);
@@ -100,6 +102,13 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
   useEffect(() => {
     if (user) {
       console.log('[NanoBanana] Current User:', { id: user.id, email: user.primaryEmailAddress?.emailAddress });
+
+      // Load GIF mode preference
+      storageService.getUserPreferences(user.id).then(prefs => {
+        if (prefs.gifMode !== undefined) {
+          setGifMode(prefs.gifMode);
+        }
+      });
     }
   }, [user]);
 
@@ -366,13 +375,43 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
     return referenceImageUri;
   }, [referenceImageUri, resultUri, showAfter, isGenerating]);
 
+  // GIF Mode effect
+  useEffect(() => {
+    let interval: NodeJS.Timeout | undefined;
+    if (gifMode && resultUri && referenceImageUri && !isGenerating) {
+      interval = setInterval(() => {
+        setShowAfter((prev) => !prev);
+      }, 1500);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [gifMode, resultUri, referenceImageUri, isGenerating]);
+
 
   const handleToggleImage = useCallback(() => {
-    if (!referenceImageUri || !resultUri || isGenerating) {
+    if (!referenceImageUri || !resultUri || isGenerating || gifMode) {
       return;
     }
     setShowAfter((prev) => !prev);
-  }, [referenceImageUri, resultUri, isGenerating]);
+  }, [referenceImageUri, resultUri, isGenerating, gifMode]);
+
+  const handleToggleGifMode = useCallback(async () => {
+    const newGifMode = !gifMode;
+    setGifMode(newGifMode);
+
+    if (user?.id) {
+      try {
+        const currentPrefs = await storageService.getUserPreferences(user.id);
+        await storageService.saveUserPreferences(
+          { ...currentPrefs, gifMode: newGifMode },
+          user.id
+        );
+      } catch (e) {
+        console.warn('[NanoBanana] Failed to save GIF mode preference:', e);
+      }
+    }
+  }, [gifMode, user?.id]);
 
   const handleShare = useCallback(async () => {
     if (!resultUri) return;
@@ -485,7 +524,7 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
                         { backgroundColor: 'rgba(0,0,0,0.5)' },
                       ]}
                     >
-                      Tap to toggle
+                      {gifMode ? 'GIF Mode Active' : 'Tap to toggle'}
                     </Text>
                   </View>
                 )}
@@ -539,6 +578,25 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
                 </BlurView>
               </View>
             )}
+
+            {/* Before & After GIF Toggle */}
+            <View style={tw`mb-4 items-center`}>
+              <TouchableOpacity
+                onPress={handleToggleGifMode}
+                disabled={isGenerating || !resultUri}
+                style={tw`flex-row items-center px-4 py-2 rounded-full border border-white/20 bg-white/5`}
+              >
+                <MaterialIcons
+                  name={gifMode ? "auto-awesome-motion" : "grid-view"}
+                  size={18}
+                  color={gifMode ? "#FFD700" : "#FFFFFF"}
+                  style={tw`mr-2`}
+                />
+                <Text style={[tw`text-xs font-bold`, { color: gifMode ? "#FFD700" : "#FFFFFF" }]}>
+                  {gifMode ? "GIF MODE ON" : "GIF MODE OFF"}
+                </Text>
+              </TouchableOpacity>
+            </View>
 
             <View style={tw`flex-row justify-between mb-4`}>
               <TouchableOpacity

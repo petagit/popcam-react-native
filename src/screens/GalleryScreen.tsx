@@ -56,7 +56,7 @@ export default function GalleryScreen(): React.JSX.Element {
   useFocusEffect(
     useCallback(() => {
       loadAnalyses();
-    }, [user])
+    }, [user?.id])
   );
 
   const formatDateHeader = (date: Date): string => {
@@ -131,39 +131,47 @@ export default function GalleryScreen(): React.JSX.Element {
     return flatData;
   };
 
-  const loadAnalyses = async (): Promise<void> => {
+  const loadAnalyses = async (isRefresh: boolean = false): Promise<void> => {
     try {
-      setIsLoading(true);
+      if (!isRefresh) setIsLoading(true);
 
-      // Sync with cloud history first to restore any missing items
+      // 1. Load local data immediately for instant response
+      const initialAnalyses: ImageAnalysis[] = await storageService.getResolvedAnalyses(user?.id);
+      updateDisplayData(initialAnalyses);
+
+      // 2. Spark background sync (don't await it strictly for UI)
       if (user?.id) {
-        try {
-          await storageService.syncCloudHistory(user.id);
-        } catch (syncError) {
-          console.warn('Background sync failed, showing local data only:', syncError);
-        }
+        // We use a small delay or just fire and forget
+        storageService.syncCloudHistory(user.id).then(async () => {
+          // 3. Post-sync refresh if something new arrived
+          const syncedAnalyses = await storageService.getResolvedAnalyses(user?.id);
+          if (syncedAnalyses.length !== initialAnalyses.length) {
+            console.log('[Gallery] New items synced, updating UI');
+            updateDisplayData(syncedAnalyses);
+          }
+        }).catch(err => console.warn('[Gallery] Sync failed:', err));
       }
-
-      const resolvedAnalyses: ImageAnalysis[] = await storageService.getResolvedAnalyses(user?.id);
-      // Filter to only show analyses with AI generations
-      const infographicAnalyses: ImageAnalysis[] = resolvedAnalyses.filter(
-        (analysis: ImageAnalysis) => analysis.hasInfographic && analysis.infographicUri
-      );
-
-      const grouped: GroupedAnalysis[] = groupAnalysesByDate(resolvedAnalyses);
-      const flatData: ListItem[] = createFlatListData(grouped);
-      setListData(flatData);
     } catch (error) {
       console.error('Error loading analyses:', error);
-      Alert.alert('Error', 'Failed to load gallery');
+      if (!isRefresh) Alert.alert('Error', 'Failed to load gallery');
     } finally {
       setIsLoading(false);
     }
   };
 
+  const updateDisplayData = (analyses: ImageAnalysis[]) => {
+    // Filter to only show analyses with AI generations (or all?)
+    // Existing logic in previous loadAnalyses had a filter line but didn't use it!
+    // const infographicAnalyses = analyses.filter(a => a.hasInfographic && a.infographicUri);
+
+    const grouped: GroupedAnalysis[] = groupAnalysesByDate(analyses);
+    const flatData: ListItem[] = createFlatListData(grouped);
+    setListData(flatData);
+  };
+
   const onRefresh = async (): Promise<void> => {
     setRefreshing(true);
-    await loadAnalyses();
+    await loadAnalyses(true);
     setRefreshing(false);
   };
 
