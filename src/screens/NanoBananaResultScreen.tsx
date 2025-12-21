@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   Text,
-  SafeAreaView,
   Image,
   TouchableOpacity,
   Alert,
@@ -31,6 +30,8 @@ import { Toast } from '../components/Toast';
 import { captureRef } from 'react-native-view-shot';
 import { BlurView } from 'expo-blur';
 import { ErrorPopup } from '../components/messagpopup/ErrorPopup';
+import LoadingOverlay from '../components/LoadingOverlay';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 
 type NanoBananaResultNavigationProp = StackNavigationProp<RootStackParamList, 'NanoBananaResult'>;
@@ -417,7 +418,7 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
         <StatusBar style="light" />
 
         {/* Floating Header */}
-        <SafeAreaView style={tw`absolute top-0 left-0 right-0 z-10`} pointerEvents="box-none">
+        <SafeAreaView style={[tw`absolute top-0 left-0 right-0 z-10`]} pointerEvents="box-none">
           <View style={tw`flex-row justify-between items-center px-5 py-2`}>
             <BackButton color="#ffffff" style={tw`bg-black/40`} />
             <TouchableOpacity
@@ -447,32 +448,11 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
           <Pressable onPress={handleToggleImage} style={tw`flex-1 justify-center items-center w-full h-full`}>
 
             {/* Loading Overlay */}
-            {isGenerating && (
-              <View style={[tw`absolute z-20 top-0 left-0 right-0 bottom-0 justify-center items-center`, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
-                <BlurView intensity={20} tint="dark" style={tw`absolute inset-0`} />
-                <View style={tw`w-4/5 items-center`}>
-                  <Image
-                    source={require('../../assets/loading-animation.gif')}
-                    style={tw`w-30 h-30 mb-5`}
-                    resizeMode="contain"
-                  />
-                  <Text style={tw`text-white text-lg font-bold mb-4 tracking-wide shadow-lg`}>Creating Masterpiece...</Text>
-
-                  {/* Progress Bar Container */}
-                  <View style={tw`w-full h-2 bg-gray-700 rounded-full overflow-hidden mb-2`}>
-                    {/* Simulated Progress Fill */}
-                    <View
-                      style={[
-                        tw`h-full bg-purple-500 rounded-full`,
-                        { width: `${progress}%` }
-                      ]}
-                    />
-                  </View>
-
-                  <Text style={tw`text-gray-300 text-sm font-semibold`}>{progress}%</Text>
-                </View>
-              </View>
-            )}
+            <LoadingOverlay
+              visible={isGenerating}
+              message="Creating Masterpiece..."
+              useModal={false}
+            />
 
             {imageToDisplay ? (
               <Image
@@ -548,7 +528,7 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
 
         {/* Footer Controls - Floating above image */}
         <SafeAreaView style={tw`absolute bottom-0 left-0 right-0 z-10`} pointerEvents="box-none">
-          <View style={tw`px-5 pb-8 pt-4`}>
+          <View style={tw`px-5 pb-4 pt-4`}>
             {/* Custom Prompt Display (Compact) */}
             {(presetId === 'custom' || customPrompt) && (
               <View style={tw`mb-4`}>

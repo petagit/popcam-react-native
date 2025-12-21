@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import {
   View,
   Text,
-  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   Image,
@@ -41,6 +40,7 @@ import BackButton from '../components/buttons/BackButton';
 import { resolvePromptConfig, PromptSource } from '../features/nano-banana/prompt-logic';
 import { createAndUploadThumbnail } from '../features/nano-banana/thumbnail-logic';
 import { useOnboarding } from '../features/onboarding/OnboardingContext';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 type NanoBananaScreenNavigationProp = StackNavigationProp<RootStackParamList, 'NanoBanana'>;
 type NanoBananaScreenRouteProp = RouteProp<RootStackParamList, 'NanoBanana'>;

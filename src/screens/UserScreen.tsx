@@ -95,14 +95,6 @@ export default function UserScreen(): React.JSX.Element {
     navigation.navigate('PurchaseCredits');
   };
 
-  const handleDebugPress = async () => {
-    // Import here to avoid cycle or assume imported supabaseService
-    const { supabaseService } = require('../services/supabaseService'); // Ensure correct import
-    setIsLoading(true);
-    const result = await supabaseService.debugConnection();
-    setIsLoading(false);
-    Alert.alert('Connection Test', result);
-  };
 
 
 
@@ -203,12 +195,6 @@ export default function UserScreen(): React.JSX.Element {
           <View style={tw`flex-row justify-between items-center mb-4`}>
             <BackButton />
             <View style={tw`flex-row items-center gap-3`}>
-              {/* Debug / Onboarding Test Group */}
-
-
-              <TouchableOpacity onPress={handleDebugPress} style={tw`bg-red-100 px-2 py-1 rounded`}>
-                <Text style={tw`text-xs text-red-800`}>Test DB</Text>
-              </TouchableOpacity>
               <CreditsButton variant="glass" />
               <SettingsButton />
               {user && <SignOutButton iconOnly size="small" />}

@@ -114,9 +114,14 @@ export default function PurchaseCreditsScreen(): React.JSX.Element {
 
       purchaseErrorSubscription = purchaseErrorListener(
         (error: PurchaseError) => {
-          console.error('Purchase error:', error);
+          console.error('[IAP] Purchase error listener:', error);
           if (error.code !== ErrorCode.UserCancelled) {
-            Alert.alert('Purchase Failed', error.message || 'Failed to complete purchase.');
+            const errorMessage = error.message || 'Failed to complete purchase.';
+            const errorCode = error.code ? ` (Code: ${error.code})` : '';
+            Alert.alert(
+              'Purchase Failed',
+              `${errorMessage}${errorCode}\n\nThis may be due to missing sandbox tester setup or incomplete store agreements.`
+            );
           }
           setPurchasingProductId(null);
         }
@@ -186,13 +191,17 @@ export default function PurchaseCreditsScreen(): React.JSX.Element {
       const purchase = await storeKitService.purchaseProduct(productId);
       await processPurchase(purchase);
     } catch (error: any) {
-      console.error('Purchase error:', error);
+      console.error('[IAP] Purchase error in handlePurchase:', error);
       if (error.code === ErrorCode.UserCancelled) {
         return;
       }
+
+      const errorMessage = error.message || 'Failed to complete purchase. Please try again.';
+      const errorCode = error.code ? ` [${error.code}]` : '';
+
       Alert.alert(
         'Purchase Failed',
-        error.message || 'Failed to complete purchase. Please try again.',
+        `${errorMessage}${errorCode}`,
         [{ text: 'OK' }]
       );
     } finally {
@@ -316,6 +325,19 @@ export default function PurchaseCreditsScreen(): React.JSX.Element {
               Each credit allows you to generate one infographic.
             </Text>
           </View>
+
+          {/* IAP Availability Warning */}
+          {!isAvailable && !isLoading && (
+            <View style={tw`bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-8 flex-row items-center`}>
+              <MaterialIcons name="warning" size={24} color="#d97706" style={tw`mr-3`} />
+              <View style={tw`flex-1`}>
+                <Text style={tw`text-amber-900 font-bold mb-1`}>Purchases Unavailable</Text>
+                <Text style={tw`text-amber-800 text-sm`}>
+                  In-app purchases are not available on this device. Please check your App Store settings and account.
+                </Text>
+              </View>
+            </View>
+          )}
 
           {/* Use the defined order */}
           {renderProductCard(PRODUCT_DISPLAY_INFO['com.popcam.app.credits24'])}

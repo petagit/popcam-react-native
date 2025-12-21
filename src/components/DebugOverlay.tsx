@@ -19,7 +19,7 @@ type DebugNavigationProp = StackNavigationProp<RootStackParamList>;
 
 const DEBUG_EMAIL = 'Petazfeng@gmail.com';
 
-const SCREENS: { name: keyof RootStackParamList; label: string }[] = [
+const SCREENS: { name?: keyof RootStackParamList; label: string }[] = [
     { name: 'Home', label: 'Home (User)' },
     { name: 'Camera', label: 'Camera' },
     { name: 'Gallery', label: 'Gallery' },
@@ -30,6 +30,7 @@ const SCREENS: { name: keyof RootStackParamList; label: string }[] = [
     { name: 'PurchaseCredits', label: 'Credits' },
     { name: 'Splash', label: 'Splash' },
     { name: 'Landing', label: 'Landing' },
+    { label: 'Test DB' },
 ];
 
 export const DebugOverlay = () => {
@@ -41,6 +42,12 @@ export const DebugOverlay = () => {
     const isDebugUser = user?.emailAddresses.some(
         (email) => email.emailAddress.toLowerCase() === DEBUG_EMAIL.toLowerCase()
     );
+
+    const handleTestDB = async () => {
+        const { supabaseService } = require('../services/supabaseService');
+        const result = await supabaseService.debugConnection();
+        alert(`Connection Test: ${result}`);
+    };
 
     if (!isDebugUser) return null;
 
@@ -58,7 +65,7 @@ export const DebugOverlay = () => {
                             >
                                 {SCREENS.map((screen) => (
                                     <TouchableOpacity
-                                        key={screen.name}
+                                        key={screen.label}
                                         style={tw`bg-white/20 px-4 py-2 rounded-full border border-white/30`}
                                         onPress={() => {
                                             if (screen.label === 'PREVIEW LOADING') {
@@ -68,7 +75,9 @@ export const DebugOverlay = () => {
                                                     debugLoading: true,
                                                     referenceImageUri: 'https://images.unsplash.com/photo-1550258114-b83030364969?auto=format&fit=crop&q=80&w=1000'
                                                 });
-                                            } else {
+                                            } else if (screen.label === 'Test DB') {
+                                                handleTestDB();
+                                            } else if (screen.name) {
                                                 // @ts-ignore - Some screens might require params but we're debugging
                                                 navigation.navigate(screen.name);
                                             }

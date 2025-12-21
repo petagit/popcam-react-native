@@ -124,6 +124,11 @@ export default function IntroAnimationScreen(): React.JSX.Element {
             {/* Title Overlay */}
             <View style={[StyleSheet.absoluteFill, styles.overlay]}>
                 <View style={styles.textContainer}>
+                    <Image
+                        source={require('../../assets/loading-animation.gif')}
+                        style={styles.loadingLogo}
+                        resizeMode="contain"
+                    />
                     <Text style={styles.title}>POPCAM</Text>
                     <Text style={styles.subtitle}>AI Photo for everyone.</Text>
                 </View>
@@ -184,6 +189,11 @@ const styles = StyleSheet.create({
     },
     textContainer: {
         alignItems: 'center',
+    },
+    loadingLogo: {
+        width: 120,
+        height: 120,
+        marginBottom: 10,
     },
     title: {
         fontSize: 48,
