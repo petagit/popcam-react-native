@@ -11,6 +11,7 @@ import { nanoBananaService } from './src/services/nanoBananaService';
 import { storageService } from './src/services/storageService';
 import { supabaseService } from './src/services/supabaseService';
 import { storeKitService } from './src/services/storeKitService';
+import { setApiTokenProvider } from './src/services/apiClient';
 import { ENV } from './src/constants/config';
 
 // Onboarding
@@ -92,6 +93,16 @@ function AuthenticatedApp(): React.JSX.Element {
 
           // Initialize Supabase with the provider
           await supabaseService.setTokenProvider(tokenProvider);
+
+          // Wire the same token (without Supabase template) to the web backend client
+          setApiTokenProvider(async () => {
+            try {
+              return await getToken(); // plain Clerk session JWT, no template
+            } catch (e) {
+              console.error('[App] Failed to get backend API token:', e);
+              return null;
+            }
+          });
 
           // Debug check
           if (__DEV__) {

@@ -228,11 +228,12 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
 
       // Deduct credits
       try {
-        console.log('[NanoBanana] Deducting credits...');
-        await deductCredits(1);
-        console.log('[NanoBanana] Credits deducted successfully');
+        // Backend already deducted credits during generation — refresh local count
+        console.log('[NanoBanana] Refreshing credits from server...');
+        await refetchCredits();
+        console.log('[NanoBanana] Credits refreshed successfully');
       } catch (e) {
-        console.warn('[NanoBanana] Failed to deduct credits:', e);
+        console.warn('[NanoBanana] Failed to refresh credits:', e);
       }
 
       // Save Analysis
@@ -340,7 +341,7 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
   }, [
     credits,
     hasEnoughCredits,
-    deductCredits,
+    refetchCredits,
     navigation,
     referenceImageUri,
     presetId,
