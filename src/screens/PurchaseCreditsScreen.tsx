@@ -22,7 +22,7 @@ import {
   ErrorCode
 } from 'react-native-iap';
 import { storeKitService, InAppProduct } from '../services/storeKitService';
-import { supabaseService } from '../services/supabaseService';
+import { apiFetch } from '../services/apiClient';
 import { useCredits } from '../hooks/useCredits';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import GlassButton from '../components/buttons/GlassButton';
@@ -212,18 +212,24 @@ export default function PurchaseCreditsScreen(): React.JSX.Element {
   const processPurchase = useCallback(async (purchase: any): Promise<void> => {
     if (!user?.id) return;
 
+    const creditsToAdd: number = storeKitService.getCreditsForProduct(purchase.productId);
+    if (creditsToAdd === 0) return;
+
     try {
-      const creditsToAdd: number = storeKitService.getCreditsForProduct(purchase.productId);
+      // Verify receipt and add credits via web backend
+      const res = await apiFetch('/api/storekit/verify', {
+        method: 'POST',
+        body: JSON.stringify({
+          productId: purchase.productId,
+          transactionId: purchase.transactionId,
+          receiptData: purchase.transactionReceipt,
+        }),
+      });
 
-      if (creditsToAdd === 0) {
-        // Maybe log?
-        return;
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error((errBody as any).error || `Verification failed: ${res.status}`);
       }
-
-      // Add credits to user's account
-      const email: string | undefined = user.primaryEmailAddress?.emailAddress ||
-        user.emailAddresses?.[0]?.emailAddress;
-      await supabaseService.addCredits(user.id, creditsToAdd, email);
 
       // Finish the transaction
       await storeKitService.finishTransaction(purchase);

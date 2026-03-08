@@ -125,11 +125,42 @@ node scripts/test-phase3.mjs
 
 ---
 
-## Phase 4 — StoreKit Receipt Validation (Pending)
+## Phase 4 — StoreKit Receipt Validation
 
-To be implemented. After Apple confirms an in-app purchase, the iOS app will
-call `POST /api/storekit/verify` on the web backend instead of writing
-directly to Supabase.
+**What it tests:**
+After Apple confirms an in-app purchase, the iOS app calls the web backend
+to validate the receipt with Apple and add credits. Supabase is no longer
+written to directly from the client.
+
+**Run:**
+```bash
+cd ~/popcamcode
+node scripts/test-phase4.mjs
+```
+
+**Tests:**
+
+| # | Description | Expected |
+|---|---|---|
+| 1 | `POST /api/storekit/verify` — no auth | `401` |
+| 2 | `POST /api/storekit/verify` — missing fields | `400` |
+| 3 | `POST /api/storekit/verify` — unknown productId | `400` |
+| 4 | `POST /api/storekit/verify` — valid auth + known productId + fake receipt | `400` with `appleStatus` in body (auth passes; Apple correctly rejects fake receipt) |
+
+> **Note on test 4:** A fake base64 receipt is used to confirm the full
+> auth → routing → Apple validation pipeline runs. Apple returns a non-zero
+> status code (e.g. 21002) which the backend converts to a 400 response.
+> Real device purchases will return 200.
+
+**Files changed:**
+- `app/api/storekit/verify/route.ts` (web backend) — NEW: receipt validation endpoint
+- `src/screens/PurchaseCreditsScreen.tsx` (iOS) — calls `apiFetch('/api/storekit/verify')` instead of `supabaseService.addCredits()`
+
+**Production setup:**
+Set `APPLE_IAP_SHARED_SECRET` in the Vercel environment (App-Specific Shared
+Secret from App Store Connect → App → In-App Purchases → Shared Secret).
+Without it, Apple still validates the receipt but without the shared secret
+confirmation step.
 
 ---
 
