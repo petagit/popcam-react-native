@@ -14,7 +14,8 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://pop-cam.com"
+        "EXPO_PUBLIC_BACKEND_URL": "https://pop-cam.com",
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsucG9wLWNhbS5jb20k"
       },
       "ios": {
         "simulator": true
@@ -23,7 +24,8 @@
     "preview-device": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://pop-cam.com"
+        "EXPO_PUBLIC_BACKEND_URL": "https://pop-cam.com",
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsucG9wLWNhbS5jb20k"
       }
     },
     "production": {
