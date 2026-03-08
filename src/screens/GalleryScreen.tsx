@@ -13,10 +13,9 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { useUser } from '@clerk/clerk-expo';
 import tw from 'twrnc';
 import { RootStackParamList, ImageAnalysis } from '../types';
-import { storageService } from '../services/storageService';
+import { apiFetch } from '../services/apiClient';
 import CameraButton from '../components/buttons/CameraButton';
 import { MaterialIcons } from '@expo/vector-icons';
 import GlassButton from '../components/buttons/GlassButton';
@@ -46,8 +45,6 @@ const ITEM_WIDTH = (width - (NUM_COLUMNS + 1) * ITEM_MARGIN * 2) / NUM_COLUMNS;
 
 export default function GalleryScreen(): React.JSX.Element {
   const navigation = useNavigation<GalleryScreenNavigationProp>();
-  const { user } = useUser();
-
   const [listData, setListData] = useState<ListItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -56,7 +53,7 @@ export default function GalleryScreen(): React.JSX.Element {
   useFocusEffect(
     useCallback(() => {
       loadAnalyses();
-    }, [user?.id])
+    }, [])
   );
 
   const formatDateHeader = (date: Date): string => {
@@ -135,24 +132,24 @@ export default function GalleryScreen(): React.JSX.Element {
     try {
       if (!isRefresh) setIsLoading(true);
 
-      // 1. Load local data immediately for instant response
-      const initialAnalyses: ImageAnalysis[] = await storageService.getResolvedAnalyses(user?.id);
-      updateDisplayData(initialAnalyses);
+      const res = await apiFetch('/api/user/images');
+      if (!res.ok) throw new Error(`Failed to load gallery: ${res.status}`);
 
-      // 2. Spark background sync (don't await it strictly for UI)
-      if (user?.id) {
-        // We use a small delay or just fire and forget
-        storageService.syncCloudHistory(user.id).then(async () => {
-          // 3. Post-sync refresh if something new arrived
-          const syncedAnalyses = await storageService.getResolvedAnalyses(user?.id);
-          if (syncedAnalyses.length !== initialAnalyses.length) {
-            console.log('[Gallery] New items synced, updating UI');
-            updateDisplayData(syncedAnalyses);
-          }
-        }).catch(err => console.warn('[Gallery] Sync failed:', err));
-      }
+      const data = await res.json();
+      const analyses: ImageAnalysis[] = (data.images ?? []).map((img: any) => ({
+        id: img.id,
+        imageUri: img.imageUrl,
+        infographicUri: img.imageUrl,
+        hasInfographic: true,
+        description: '',
+        tags: [],
+        timestamp: new Date(img.createdAt),
+        cloudUrl: img.imageUrl,
+      }));
+
+      updateDisplayData(analyses);
     } catch (error) {
-      console.error('Error loading analyses:', error);
+      console.error('Error loading gallery:', error);
       if (!isRefresh) Alert.alert('Error', 'Failed to load gallery');
     } finally {
       setIsLoading(false);
