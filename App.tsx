@@ -73,10 +73,10 @@ function AuthenticatedApp(): React.JSX.Element {
   const [isReady, setIsReady] = React.useState(false);
 
   useEffect(() => {
+    if (!isLoaded) return; // Don't render until Clerk is ready
+
     const initAuth = async () => {
       try {
-        if (!isLoaded) return;
-
         if (userId) {
           console.log('[App] Authenticated as:', userId);
 
