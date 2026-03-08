@@ -151,9 +151,8 @@ function AuthenticatedApp(): React.JSX.Element {
   }
 
   return (
-    <OnboardingProvider>
-      <NavigationContainer>
-        <Stack.Navigator
+    <NavigationContainer>
+      <Stack.Navigator
           initialRouteName="Camera"
           screenOptions={{
             headerShown: false,
@@ -243,7 +242,6 @@ function AuthenticatedApp(): React.JSX.Element {
         {/* Debug Overlay Restricted to Admin */}
         <DebugOverlay />
       </NavigationContainer>
-    </OnboardingProvider>
   );
 }
 
@@ -335,16 +333,18 @@ export default function App(): React.JSX.Element {
   return (
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
       <SafeAreaProvider>
-        {/* Debug Logging */}
-        <View style={{ position: 'absolute', top: 50, left: 10, zIndex: 999 }}>
-          <Text style={{ color: 'red', fontSize: 12 }}>Check Logs</Text>
-        </View>
-        <SignedIn>
-          <AuthenticatedApp />
-        </SignedIn>
-        <SignedOut>
-          <UnauthenticatedApp />
-        </SignedOut>
+        <OnboardingProvider>
+          {/* Debug Logging */}
+          <View style={{ position: 'absolute', top: 50, left: 10, zIndex: 999 }}>
+            <Text style={{ color: 'red', fontSize: 12 }}>Check Logs</Text>
+          </View>
+          <SignedIn>
+            <AuthenticatedApp />
+          </SignedIn>
+          <SignedOut>
+            <UnauthenticatedApp />
+          </SignedOut>
+        </OnboardingProvider>
       </SafeAreaProvider>
     </ClerkProvider>
   );
