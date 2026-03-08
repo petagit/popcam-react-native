@@ -1,14 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { useUser } from '@clerk/clerk-expo';
-import { supabaseService } from '../services/supabaseService';
+import { apiFetch } from '../services/apiClient';
 
 export interface UseCreditsReturn {
   credits: number;
   isLoading: boolean;
   error: string | null;
   refetchCredits: () => Promise<void>;
-  deductCredits: (amount?: number) => Promise<number>;
   hasEnoughCredits: (amount?: number) => boolean;
 }
 
@@ -19,22 +18,12 @@ export const useCredits = (): UseCreditsReturn => {
   const [error, setError] = useState<string | null>(null);
 
   const resolveUserEmail = useCallback((): string | null => {
-    if (!user?.id) {
-      return null;
-    }
-
-    const primaryEmail = user.primaryEmailAddress?.emailAddress;
-    const firstEmail = user.emailAddresses?.[0]?.emailAddress;
-
-    if (primaryEmail) {
-      return primaryEmail;
-    }
-
-    if (firstEmail) {
-      return firstEmail;
-    }
-
-    return `${user.id}@placeholder.popcam`;
+    if (!user?.id) return null;
+    return (
+      user.primaryEmailAddress?.emailAddress ||
+      user.emailAddresses?.[0]?.emailAddress ||
+      `${user.id}@placeholder.popcam`
+    );
   }, [user]);
 
   const fetchCredits = useCallback(async (): Promise<void> => {
@@ -48,16 +37,22 @@ export const useCredits = (): UseCreditsReturn => {
       setIsLoading(true);
 
       const email = resolveUserEmail();
+      if (!email) throw new Error('No email available for the current user.');
 
-      if (!email) {
-        throw new Error('No email available for the current user.');
+      // Sync user with web backend (creates or updates record)
+      await apiFetch('/api/user/sync', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      });
+
+      // Fetch credits from web backend
+      const res = await apiFetch('/api/user/credits');
+      if (!res.ok) {
+        throw new Error(`Failed to fetch credits: ${res.status}`);
       }
 
-      // Ensure user exists in database
-      await supabaseService.createOrUpdateUser(user.id, email);
-
-      const userCredits: number = await supabaseService.getUserCredits(user.id, email);
-      setCredits(userCredits);
+      const data = await res.json();
+      setCredits(data.credits ?? 0);
     } catch (err) {
       console.error('Error fetching credits:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch credits');
@@ -69,27 +64,6 @@ export const useCredits = (): UseCreditsReturn => {
   const refetchCredits = useCallback(async (): Promise<void> => {
     await fetchCredits();
   }, [fetchCredits]);
-
-  const deductCredits = useCallback(async (amount: number = 1): Promise<number> => {
-    if (!user?.id) {
-      throw new Error('User not authenticated');
-    }
-
-    try {
-      const email = resolveUserEmail();
-      if (!email) {
-        throw new Error('No email available for the current user.');
-      }
-
-      const newCredits: number = await supabaseService.deductCredits(user.id, amount, email);
-      setCredits(newCredits);
-      return newCredits;
-    } catch (err) {
-      console.error('Error deducting credits:', err);
-      setError(err instanceof Error ? err.message : 'Failed to deduct credits');
-      throw err;
-    }
-  }, [user?.id, resolveUserEmail]);
 
   const hasEnoughCredits = useCallback((amount: number = 1): boolean => {
     return credits >= amount;
@@ -106,7 +80,6 @@ export const useCredits = (): UseCreditsReturn => {
     isLoading,
     error,
     refetchCredits,
-    deductCredits,
     hasEnoughCredits,
   };
-}; 
+};

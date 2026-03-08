@@ -25,7 +25,6 @@ import { imageUtils } from '../utils/imageUtils';
 import { nanoBananaService } from '../services/nanoBananaService';
 import { storageService } from '../services/storageService';
 import { r2Service } from '../services/r2Service';
-import { supabaseService } from '../services/supabaseService';
 import { Toast } from '../components/Toast';
 import { captureRef } from 'react-native-view-shot';
 import { BlurView } from 'expo-blur';
@@ -97,7 +96,7 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
 
 
   const { user } = useUser();
-  const { credits, hasEnoughCredits, deductCredits, isLoading: creditsLoading, refetchCredits } = useCredits();
+  const { credits, hasEnoughCredits, isLoading: creditsLoading, refetchCredits } = useCredits();
 
   useEffect(() => {
     if (user) {
@@ -262,8 +261,7 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
             analysis.cloudUrl = cloudUrl;
             finalCloudUrl = cloudUrl;
 
-            // Save to Supabase (User History DB)
-            await supabaseService.saveGeneratedImage(user.id, cloudUrl, promptToUse);
+            // Image already recorded server-side in /api/nanobanana — no client write needed
           }
         }
 
