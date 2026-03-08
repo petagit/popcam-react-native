@@ -120,12 +120,6 @@ function AuthenticatedApp(): React.JSX.Element {
             openaiService.setApiKey(envApiKey);
           }
 
-          const envNanoBananaKey: string = (ENV.NANO_BANANA_API_KEY || '').trim();
-          if (envNanoBananaKey) nanoBananaService.setApiKey(envNanoBananaKey);
-
-          const envNanoBananaModel: string = (ENV.NANO_BANANA_MODEL || '').trim();
-          if (envNanoBananaModel) nanoBananaService.setModel(envNanoBananaModel);
-
           // Initialize StoreKit early (fire and forget, it handles its own errors)
           storeKitService.initialize().catch(err => console.log('StoreKit init deferred:', err.message));
 
