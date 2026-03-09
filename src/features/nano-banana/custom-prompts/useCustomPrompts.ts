@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Alert } from 'react-native';
-import { useUser, useAuth } from '@clerk/clerk-expo';
+import { useUser } from '@clerk/clerk-expo';
 import { storageService } from '../../../services/storageService';
 import { r2Service } from '../../../services/r2Service';
 
@@ -10,25 +10,13 @@ export const useCustomPrompts = () => {
     const [isLoading, setIsLoading] = useState<boolean>(false);
 
     const loadPromptHistory = useCallback(async () => {
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/7568f864-cfb0-4b28-aa9e-daea10a985f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useCustomPrompts.ts:loadStart',message:'loadPromptHistory called',data:{userId:user?.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
-
         if (!user?.id) {
-            console.log('[useCustomPrompts] Skipping load, no user ID.');
             return;
         }
 
         setIsLoading(true);
         try {
-            console.log('[useCustomPrompts] Loading history for:', user.id);
             const history = await storageService.getCustomPromptHistory(user.id);
-            console.log('[useCustomPrompts] Loaded items from DB:', history.length);
-
-            // #region agent log
-            console.log('[DEBUG] Raw thumbnails from DB:', JSON.stringify(history.slice(0,3).map(h=>({id:h.id.substring(0,8),url:h.thumbnail_url?.substring(0,60)}))));
-            fetch('http://127.0.0.1:7244/ingest/7568f864-cfb0-4b28-aa9e-daea10a985f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useCustomPrompts.ts:historyLoaded',message:'History loaded from DB (before URL resolve)',data:{count:history.length,thumbnails:history.slice(0,5).map(h=>({id:h.id,rawUrl:h.thumbnail_url?.substring(0,70)}))},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-            // #endregion
 
             // Resolve URLs (e.g. presigned URLs)
             const resolvedHistory = await Promise.all(history.map(async (item) => {
@@ -56,10 +44,6 @@ export const useCustomPrompts = () => {
                 return { ...item, thumbnail_url: resolvedUrl, secondary_image_url: resolvedSecondaryUrl };
             }));
 
-            // #region agent log
-            console.log('[DEBUG] Resolved thumbnails:', JSON.stringify(resolvedHistory.slice(0,3).map(h=>({id:h.id.substring(0,8),url:h.thumbnail_url?.substring(0,60)}))));
-            fetch('http://127.0.0.1:7244/ingest/7568f864-cfb0-4b28-aa9e-daea10a985f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useCustomPrompts.ts:afterResolve',message:'After URL resolve, before setState',data:{count:resolvedHistory.length,thumbnails:resolvedHistory.slice(0,5).map(h=>({id:h.id,resolvedUrl:h.thumbnail_url?.substring(0,70)}))},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E-resolve'})}).catch(()=>{});
-            // #endregion
             setPromptHistory(resolvedHistory);
         } catch (error) {
             console.error('[useCustomPrompts] Failed to load prompt history', error);

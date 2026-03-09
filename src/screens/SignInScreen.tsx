@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useSignIn, useOAuth } from '@clerk/clerk-expo';
+import * as Linking from 'expo-linking';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import tw from 'twrnc';
@@ -69,7 +70,8 @@ export default function SignInScreen(): React.JSX.Element {
     setIsAppleLoading(true);
 
     try {
-      const { createdSessionId, setActive: setActiveOAuth } = await startAppleOAuth();
+      const redirectUrl = Linking.createURL('callback');
+      const { createdSessionId, setActive: setActiveOAuth } = await startAppleOAuth({ redirectUrl });
 
       if (createdSessionId && setActiveOAuth) {
         await setActiveOAuth({ session: createdSessionId });
@@ -87,7 +89,9 @@ export default function SignInScreen(): React.JSX.Element {
     setIsGoogleLoading(true);
 
     try {
-      const { createdSessionId, setActive: setActiveOAuth } = await startGoogleOAuth();
+      const redirectUrl = Linking.createURL('callback');
+      console.log('[OAuth] Google redirect URL:', redirectUrl);
+      const { createdSessionId, setActive: setActiveOAuth } = await startGoogleOAuth({ redirectUrl });
 
       if (createdSessionId && setActiveOAuth) {
         await setActiveOAuth({ session: createdSessionId });

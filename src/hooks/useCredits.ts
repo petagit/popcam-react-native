@@ -9,6 +9,7 @@ export interface UseCreditsReturn {
   error: string | null;
   refetchCredits: () => Promise<void>;
   hasEnoughCredits: (amount?: number) => boolean;
+  deductCredits: (amount: number) => Promise<boolean>;
 }
 
 export const useCredits = (): UseCreditsReturn => {
@@ -69,6 +70,17 @@ export const useCredits = (): UseCreditsReturn => {
     return credits >= amount;
   }, [credits]);
 
+  const deductCredits = useCallback(async (amount: number): Promise<boolean> => {
+    // Note: Deductions should ideally happen on the backend during the API call
+    // This is maintained for compatibility
+    console.warn('[useCredits] deductCredits called on client. Ensure backend handles deductions.');
+    if (credits >= amount) {
+      setCredits(prev => prev - amount);
+      return true;
+    }
+    return false;
+  }, [credits]);
+
   useFocusEffect(
     useCallback(() => {
       fetchCredits();
@@ -81,5 +93,6 @@ export const useCredits = (): UseCreditsReturn => {
     error,
     refetchCredits,
     hasEnoughCredits,
+    deductCredits,
   };
 };

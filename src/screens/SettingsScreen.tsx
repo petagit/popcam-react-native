@@ -15,7 +15,7 @@ import { useUser, useClerk } from '@clerk/clerk-expo';
 import tw from 'twrnc';
 import { RootStackParamList } from '../types';
 import { storageService } from '../services/storageService';
-import { supabaseService } from '../services/supabaseService';
+import { apiFetch } from '../services/apiClient';
 import { MaterialIcons } from '@expo/vector-icons';
 import GlassButton from '../components/buttons/GlassButton';
 import BackButton from '../components/buttons/BackButton';
@@ -143,12 +143,12 @@ export default function SettingsScreen() {
     try {
       const userId: string = user.id;
 
-      // 1. Delete user data from Supabase
+      // 1. Delete user data via Backend API
       try {
-        await supabaseService.deleteUserAccount(userId);
-      } catch (supabaseError) {
-        console.error('Error deleting from Supabase:', supabaseError);
-        // Continue with other deletions even if Supabase fails
+        await apiFetch('/api/user', { method: 'DELETE' });
+      } catch (backendError) {
+        console.error('Error deleting from Backend:', backendError);
+        // Continue with other deletions even if Backend fails
       }
 
       // 2. Delete local storage data

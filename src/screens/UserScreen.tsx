@@ -17,6 +17,7 @@ import { useUser } from '@clerk/clerk-expo';
 import tw from 'twrnc';
 import { MaterialIcons } from '@expo/vector-icons';
 import { RootStackParamList, ImageAnalysis } from '../types';
+import { apiFetch } from '../services/apiClient';
 import { storageService } from '../services/storageService';
 import SignOutButton from '../components/buttons/SignOutButton';
 import { UserProfileSection } from '../components/UserProfileSection';
@@ -61,11 +62,19 @@ export default function UserScreen(): React.JSX.Element {
 
   const loadRecentGenerations = async (): Promise<void> => {
     try {
-      if (user?.id) {
-        // Automatically try to restore missing items from cloud history
-        await storageService.syncCloudHistory(user.id);
-      }
-      const analyses: ImageAnalysis[] = await storageService.getResolvedAnalyses(user?.id);
+      const res = await apiFetch('/api/user/images');
+      if (!res.ok) throw new Error(`Failed to load generations: ${res.status}`);
+      const data = await res.json();
+      const analyses: ImageAnalysis[] = (data.images ?? []).map((img: any) => ({
+        id: img.id,
+        imageUri: img.imageUrl,
+        infographicUri: img.imageUrl,
+        hasInfographic: true,
+        description: '',
+        tags: [],
+        timestamp: new Date(img.createdAt),
+        cloudUrl: img.imageUrl,
+      }));
       setRecentGenerations(analyses.slice(0, 6));
     } catch (error) {
       console.error('Error loading generations:', error);

@@ -25,7 +25,7 @@ import { useCredits } from '../hooks/useCredits';
 import { RootStackParamList } from '../types';
 import { imageUtils } from '../utils/imageUtils';
 import { MaterialIcons } from '@expo/vector-icons';
-import { storageService, LocalPreset } from '../services/storageService';
+import { storageService } from '../services/storageService';
 import { useUser } from '@clerk/clerk-expo';
 import AppBackground from '../components/AppBackground';
 import { useCustomPrompts } from '../features/nano-banana/custom-prompts/useCustomPrompts';
@@ -52,7 +52,7 @@ export default function NanoBananaScreen(): React.JSX.Element {
   const { user } = useUser();
   const { isActive, currentStep, registerTarget, nextStep, deregisterTarget } = useOnboarding();
 
-  const { promptHistory, loadPromptHistory, savePrompt, deletePrompt, updatePrompt } = useCustomPrompts();
+  const { promptHistory, isLoading: isLoadingPrompts, loadPromptHistory, savePrompt, deletePrompt, updatePrompt } = useCustomPrompts();
 
   // Ensure we are on the correct step if coming from Camera
   useEffect(() => {
@@ -76,8 +76,6 @@ export default function NanoBananaScreen(): React.JSX.Element {
   const [customPrompt, setCustomPrompt] = useState<string>('');
   const [isCustomPromptEnabled, setIsCustomPromptEnabled] = useState<boolean>(false);
   const [isHistoryModalVisible, setIsHistoryModalVisible] = useState<boolean>(false);
-  const [localPresets, setLocalPresets] = useState<LocalPreset[]>([]);
-  const [isLoadingPresets, setIsLoadingPresets] = useState<boolean>(true);
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
 
   // Refs for onboarding targets
@@ -110,31 +108,11 @@ export default function NanoBananaScreen(): React.JSX.Element {
     }, 500);
 
     return () => clearTimeout(t);
-  }, [isActive, currentStep, isLoadingPresets, measureAndRegister]);
+  }, [isActive, currentStep, isLoadingPrompts, measureAndRegister]);
 
-  const loadLocalPresets = useCallback(async () => {
-    setIsLoadingPresets(true);
-    if (user?.id) {
-      try {
-        const presets = await storageService.getLocalPresets(user.id);
-        setLocalPresets(presets);
-      } catch (error) {
-        console.error('Failed to load local presets', error);
-      } finally {
-        setIsLoadingPresets(false);
-      }
-    } else {
-      setIsLoadingPresets(false);
-    }
-  }, [user?.id]);
-
-  useEffect(() => {
-    loadLocalPresets();
-  }, [loadLocalPresets]);
 
   const gridItems: GridItem[] = useMemo(() => {
     const presetItems: GridItem[] = NANO_BANANA_PRESETS.map((p: NanoBananaPreset) => ({ type: 'preset', preset: p }));
-    // Using promptHistory instead of localPresets
     const customItems: GridItem[] = promptHistory.map(p => ({
       type: 'history_custom',
       preset: p
@@ -525,13 +503,15 @@ export default function NanoBananaScreen(): React.JSX.Element {
               return !!result;
             }}
             onViewHistory={() => setIsHistoryModalVisible(true)}
-            onUsePrompt={() => {
+            onUsePrompt={async () => {
               if (!customPrompt.trim()) return;
-              goToConfirm('custom', 'Custom Prompt', customPrompt.trim());
+              const newId = await savePrompt(customPrompt.trim());
+              const idToUse = (typeof newId === 'string' && newId) ? newId : 'custom';
+              goToConfirm(idToUse, 'Custom Prompt', customPrompt.trim());
             }}
           />
 
-          {isLoadingPresets ? (
+          {isLoadingPrompts ? (
             <View style={tw`flex-row flex-wrap`}>
               {Array.from({ length: 9 }).map((_, idx) => (
                 <View

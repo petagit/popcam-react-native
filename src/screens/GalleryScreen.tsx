@@ -20,7 +20,8 @@ import CameraButton from '../components/buttons/CameraButton';
 import { MaterialIcons } from '@expo/vector-icons';
 import GlassButton from '../components/buttons/GlassButton';
 import BackButton from '../components/buttons/BackButton';
-import AppBackground from '../components/AppBackground';
+import AppBackground from '../components/AppBackground'; import { storageService } from '../services/storageService';
+import { useUser } from '@clerk/clerk-expo';
 
 type GalleryScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Gallery'>;
 
@@ -45,6 +46,7 @@ const ITEM_WIDTH = (width - (NUM_COLUMNS + 1) * ITEM_MARGIN * 2) / NUM_COLUMNS;
 
 export default function GalleryScreen(): React.JSX.Element {
   const navigation = useNavigation<GalleryScreenNavigationProp>();
+  const { user } = useUser();
   const [listData, setListData] = useState<ListItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -192,7 +194,11 @@ export default function GalleryScreen(): React.JSX.Element {
           style: 'destructive',
           onPress: async () => {
             try {
-              await storageService.deleteAnalysis(analysis.id, user?.id);
+              if (!user?.id) {
+                Alert.alert('Error', 'Not logged in');
+                return;
+              }
+              await storageService.deleteAnalysis(analysis.id, user.id);
               await loadAnalyses(); // Refresh the list
             } catch (error) {
               console.error('Error deleting photo:', error);

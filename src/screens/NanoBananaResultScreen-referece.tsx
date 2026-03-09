@@ -26,7 +26,6 @@ import { imageUtils } from '../utils/imageUtils';
 import { nanoBananaService } from '../services/nanoBananaService';
 import { storageService } from '../services/storageService';
 import { r2Service } from '../services/r2Service';
-import { supabaseService } from '../services/supabaseService';
 import { Toast } from '../components/Toast';
 import { captureRef } from 'react-native-view-shot';
 
@@ -71,7 +70,7 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
   }, [isGenerating]);
 
   const { user } = useUser();
-  const { credits, hasEnoughCredits, deductCredits, isLoading: creditsLoading, refetchCredits } = useCredits();
+  const { credits, hasEnoughCredits, deductCredits, isLoading: creditsLoading } = useCredits();
 
   useEffect(() => {
     if (user) {
@@ -193,14 +192,7 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
       const localResultUri: string = await imageUtils.saveImageLocally(generatedDataUrl);
       console.log('[NanoBanana] Saved locally to:', localResultUri);
 
-      // Deduct credits
-      try {
-        console.log('[NanoBanana] Deducting credits...');
-        await deductCredits(1);
-        console.log('[NanoBanana] Credits deducted successfully');
-      } catch (e) {
-        console.warn('[NanoBanana] Failed to deduct credits:', e);
-      }
+      // Use API to track the image later
 
       // Save Analysis
       const analysis: ImageAnalysis = {
@@ -228,8 +220,8 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
             analysis.cloudUrl = cloudUrl;
             finalCloudUrl = cloudUrl;
 
-            // Save to Supabase (User History DB)
-            await supabaseService.saveGeneratedImage(user.id, cloudUrl, promptToUse);
+            // We use API now to fetch/save generated images
+            // Removed supabaseService.saveGeneratedImage calls
           }
         }
 
@@ -324,7 +316,7 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
     // Wait for credits to load before attempting auto-generation
     // using resultUri check to ensure we don't regenerate if already done
     // Use ref to prevent duplicate generation when dependencies (like credits/generateImage) change
-    if (autoGenerate && !resultUri && !creditsLoading && !hasStartedGeneration.current) {
+    if (autoGenerate && !resultUri && !hasStartedGeneration.current) {
       hasStartedGeneration.current = true;
       generateImage();
     }

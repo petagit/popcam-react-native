@@ -18,6 +18,8 @@ export function setApiTokenProvider(provider: () => Promise<string | null>): voi
 export async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const token = _tokenProvider ? await _tokenProvider() : null
 
+  console.log(`[apiFetch] ${options.method || 'GET'} ${path} | token: ${token ? 'yes' : 'NO TOKEN'} | provider: ${_tokenProvider ? 'set' : 'NOT SET'}`)
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> | undefined),
@@ -27,5 +29,7 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
     headers['Authorization'] = `Bearer ${token}`
   }
 
-  return fetch(`${BASE_URL}${path}`, { ...options, headers })
+  const res = await fetch(`${BASE_URL}${path}`, { ...options, headers })
+  console.log(`[apiFetch] ${path} → ${res.status}`)
+  return res
 }

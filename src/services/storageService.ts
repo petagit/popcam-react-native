@@ -1,7 +1,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ImageAnalysis } from '../types';
-import { supabaseService } from './supabaseService';
+import { apiFetch } from './apiClient';
 import { r2Service } from './r2Service';
 import { STORAGE_KEYS, APP_CONFIG } from '../constants/config';
 import { imageUtils } from '../utils/imageUtils';
@@ -406,7 +406,11 @@ class StorageService {
   async syncCloudHistory(userId: string): Promise<void> {
     try {
       console.log('[StorageService] Syncing cloud history for:', userId);
-      const cloudImages = await supabaseService.getGeneratedImages(userId, 50); // Get last 50
+      const response = await apiFetch(`/api/user/images`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch cloud history: ${response.statusText}`);
+      }
+      const cloudImages = await response.json();
       console.log(`[StorageService] Found ${cloudImages.length} items in cloud for user ${userId}`);
       if (cloudImages.length === 0) {
         console.log('[StorageService] No cloud history found.');
@@ -526,30 +530,43 @@ class StorageService {
     }
   }
 
+  // Maps backend camelCase fields to local snake_case
+  private mapBackendPrompt(p: any): { id: string; prompt_text: string; title?: string; thumbnail_url?: string; secondary_image_url?: string } {
+    return {
+      id: p.id,
+      prompt_text: p.promptText ?? p.prompt_text ?? '',
+      title: p.title,
+      thumbnail_url: p.thumbnailUrl ?? p.thumbnail_url,
+      secondary_image_url: p.secondaryImageUrl ?? p.secondary_image_url,
+    };
+  }
+
   async getCustomPromptHistory(userId?: string): Promise<{ id: string; prompt_text: string; title?: string; thumbnail_url?: string; secondary_image_url?: string }[]> {
     try {
-      if (userId) {
-        return await supabaseService.getCustomPrompts(userId);
+      const res = await apiFetch('/api/custom-prompts');
+      if (res.ok) {
+        const data = await res.json();
+        const prompts = (data.prompts ?? []).map((p: any) => this.mapBackendPrompt(p));
+        // Cache locally
+        await AsyncStorage.setItem(STORAGE_KEYS.CUSTOM_PROMPT_HISTORY, JSON.stringify(prompts));
+        return prompts;
       }
-
-      // Fallback local storage
-      const storageKey = STORAGE_KEYS.CUSTOM_PROMPT_HISTORY;
-      const historyJson = await AsyncStorage.getItem(storageKey);
-      return historyJson ? JSON.parse(historyJson) : [];
+      console.warn('Failed to fetch custom prompts from API:', res.status);
     } catch (error) {
-      console.error('Error loading custom prompt history:', error);
+      console.warn('Error fetching custom prompts from API, falling back to cache:', error);
+    }
+    // Fallback to local cache
+    try {
+      const historyJson = await AsyncStorage.getItem(STORAGE_KEYS.CUSTOM_PROMPT_HISTORY);
+      return historyJson ? JSON.parse(historyJson) : [];
+    } catch {
       return [];
     }
   }
 
   async getCustomPrompt(id: string, userId?: string): Promise<{ id: string; prompt_text: string; title?: string; thumbnail_url?: string; secondary_image_url?: string } | null> {
     try {
-      if (userId) {
-        return await supabaseService.getCustomPrompt(id, userId);
-      }
-
-      // Fallback local
-      const history = await this.getCustomPromptHistory();
+      const history = await this.getCustomPromptHistory(userId);
       return history.find(p => p.id === id) || null;
     } catch (error) {
       console.error('Error loading single custom prompt:', error);
@@ -559,19 +576,22 @@ class StorageService {
 
   async deleteCustomPromptFromHistory(id: string, userId?: string): Promise<void> {
     try {
-      if (userId) {
-        await supabaseService.deleteCustomPrompt(id, userId);
-        return;
+      const res = await apiFetch(`/api/custom-prompts?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (!res.ok) {
+        console.warn('Failed to delete custom prompt from API:', res.status);
       }
-
-      // Fallback local
-      const storageKey = STORAGE_KEYS.CUSTOM_PROMPT_HISTORY;
-      const currentHistory = await this.getCustomPromptHistory();
-      const filteredHistory = currentHistory.filter(p => p.id !== id);
-      await AsyncStorage.setItem(storageKey, JSON.stringify(filteredHistory));
     } catch (error) {
-      console.error('Error deleting prompt:', error);
-      throw error;
+      console.error('Error deleting prompt from API:', error);
+    }
+    // Also remove from local cache
+    try {
+      const historyJson = await AsyncStorage.getItem(STORAGE_KEYS.CUSTOM_PROMPT_HISTORY);
+      if (historyJson) {
+        const history = JSON.parse(historyJson).filter((p: any) => p.id !== id);
+        await AsyncStorage.setItem(STORAGE_KEYS.CUSTOM_PROMPT_HISTORY, JSON.stringify(history));
+      }
+    } catch (error) {
+      console.error('Error updating local cache after delete:', error);
     }
   }
 
@@ -582,37 +602,29 @@ class StorageService {
     thumbnailUrl?: string,
     secondaryImageUrl?: string
   ): Promise<string | null> {
+    if (!prompt || !prompt.trim()) return null;
+
     try {
-      if (!prompt || !prompt.trim()) return null;
+      const body: any = { promptText: prompt.trim() };
+      if (title) body.title = title;
+      if (thumbnailUrl) body.thumbnailUrl = thumbnailUrl;
+      if (secondaryImageUrl) body.secondaryImageUrl = secondaryImageUrl;
 
-      if (userId) {
-        return await supabaseService.saveCustomPrompt(userId, prompt, title, thumbnailUrl, secondaryImageUrl);
+      const res = await apiFetch('/api/custom-prompts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        return data.prompt?.id ?? null;
       }
-
-      // Fallback local logic
-      const storageKey = STORAGE_KEYS.CUSTOM_PROMPT_HISTORY;
-      const currentHistory = await this.getCustomPromptHistory();
-      // Simple local ID generation for fallback
-      const newId = Date.now().toString();
-      const newItem = {
-        id: newId,
-        prompt_text: prompt,
-        title: title,
-        thumbnail_url: thumbnailUrl,
-        secondary_image_url: secondaryImageUrl
-      };
-
-      // Filter out exact duplicate prompt text if we want to avoid dupes? 
-      // But user might want same prompt with different image/title. 
-      // Let's rely on ID uniqueness or just append. 
-      // Original logic filtered by prompt_text to avoid dupes.
-      const filteredHistory = currentHistory.filter(p => p.prompt_text !== prompt);
-      const newHistory = [newItem, ...filteredHistory].slice(0, 20);
-      await AsyncStorage.setItem(storageKey, JSON.stringify(newHistory));
-      return newId;
+      console.warn('Failed to save custom prompt to API:', res.status);
+      return null;
     } catch (error) {
-      console.error('Error saving custom prompt history:', error);
-      throw error;
+      console.error('Error saving custom prompt:', error);
+      return null;
     }
   }
 
@@ -622,24 +634,21 @@ class StorageService {
     userId?: string
   ): Promise<void> {
     try {
-      if (userId) {
-        const success = await supabaseService.updateCustomPrompt(id, userId, updates);
-        if (!success) {
-          throw new Error('Supabase update failed');
-        }
-        return;
-      }
+      const body: any = { id };
+      if (updates.prompt_text) body.promptText = updates.prompt_text;
+      if (updates.title) body.title = updates.title;
+      if (updates.thumbnail_url) body.thumbnailUrl = updates.thumbnail_url;
+      if (updates.secondary_image_url) body.secondaryImageUrl = updates.secondary_image_url;
 
-      // Fallback local
-      const storageKey = STORAGE_KEYS.CUSTOM_PROMPT_HISTORY;
-      const currentHistory = await this.getCustomPromptHistory();
-      const updatedHistory = currentHistory.map(item => {
-        if (item.id === id) {
-          return { ...item, ...updates };
-        }
-        return item;
+      const res = await apiFetch('/api/custom-prompts', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
       });
-      await AsyncStorage.setItem(storageKey, JSON.stringify(updatedHistory));
+
+      if (!res.ok) {
+        console.warn('Failed to update custom prompt on API:', res.status);
+      }
     } catch (error) {
       console.error('Error updating custom prompt:', error);
       throw error;

@@ -9,7 +9,6 @@ import { RootStackParamList } from './src/types';
 import { openaiService } from './src/services/openaiService';
 import { nanoBananaService } from './src/services/nanoBananaService';
 import { storageService } from './src/services/storageService';
-import { supabaseService } from './src/services/supabaseService';
 import { storeKitService } from './src/services/storeKitService';
 import { setApiTokenProvider } from './src/services/apiClient';
 import { ENV } from './src/constants/config';
@@ -91,8 +90,7 @@ function AuthenticatedApp(): React.JSX.Element {
             }
           };
 
-          // Initialize Supabase with the provider
-          await supabaseService.setTokenProvider(tokenProvider);
+
 
           // Wire the same token (without Supabase template) to the web backend client
           setApiTokenProvider(async () => {
@@ -104,11 +102,7 @@ function AuthenticatedApp(): React.JSX.Element {
             }
           });
 
-          // Debug check
-          if (__DEV__) {
-            const initialToken = await tokenProvider();
-            if (initialToken) supabaseService.logTokenDebug(initialToken);
-          }
+
 
           // Init other services
           const storedApiKey: string | null = await storageService.getApiKey();
@@ -123,14 +117,10 @@ function AuthenticatedApp(): React.JSX.Element {
           // Initialize StoreKit early (fire and forget, it handles its own errors)
           storeKitService.initialize().catch(err => console.log('StoreKit init deferred:', err.message));
 
-          // Check Supabase connection
-          supabaseService.checkConnection().then((connected: boolean) => {
-            if (!connected) console.warn('Supabase connection check failed on startup');
-          });
+
 
         } else {
-          console.log('[App] No user, clearing Supabase auth');
-          supabaseService.setAuthToken(null);
+          console.log('[App] No user');
         }
       } catch (err) {
         console.error('[App] Error during auth init:', err);
@@ -153,95 +143,95 @@ function AuthenticatedApp(): React.JSX.Element {
   return (
     <NavigationContainer>
       <Stack.Navigator
-          initialRouteName="Camera"
-          screenOptions={{
-            headerShown: false,
-            gestureEnabled: true,
-            cardStyleInterpolator: ({ current, layouts }) => {
-              return {
-                cardStyle: {
-                  transform: [
-                    {
-                      translateX: current.progress.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [layouts.screen.width, 0],
-                      }),
-                    },
-                  ],
-                },
-              };
-            },
+        initialRouteName="Camera"
+        screenOptions={{
+          headerShown: false,
+          gestureEnabled: true,
+          cardStyleInterpolator: ({ current, layouts }) => {
+            return {
+              cardStyle: {
+                transform: [
+                  {
+                    translateX: current.progress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [layouts.screen.width, 0],
+                    }),
+                  },
+                ],
+              },
+            };
+          },
+        }}
+      >
+        <Stack.Screen
+          name="Home"
+          component={UserScreen}
+          options={{
+            title: 'PopCam',
           }}
-        >
-          <Stack.Screen
-            name="Home"
-            component={UserScreen}
-            options={{
-              title: 'PopCam',
-            }}
-          />
-          <Stack.Screen
-            name="Camera"
-            component={CameraScreen}
-            options={{
-              title: 'Camera',
-              gestureEnabled: false, // Disable swipe back for camera
-            }}
-          />
-          <Stack.Screen
-            name="GalleryImage"
-            component={GalleryImageScreen}
-            options={{
-              title: 'AI Analysis',
-            }}
-          />
-          <Stack.Screen
-            name="Gallery"
-            component={GalleryScreen}
-            options={{
-              title: 'Gallery',
-            }}
-          />
-          <Stack.Screen
-            name="Settings"
-            component={SettingsScreen}
-            options={{
-              title: 'Settings',
-            }}
-          />
-          <Stack.Screen
-            name="NanoBanana"
-            component={NanoBananaScreen}
-            options={{
-              title: 'Nano Banana',
-            }}
-          />
+        />
+        <Stack.Screen
+          name="Camera"
+          component={CameraScreen}
+          options={{
+            title: 'Camera',
+            gestureEnabled: false, // Disable swipe back for camera
+          }}
+        />
+        <Stack.Screen
+          name="GalleryImage"
+          component={GalleryImageScreen}
+          options={{
+            title: 'AI Analysis',
+          }}
+        />
+        <Stack.Screen
+          name="Gallery"
+          component={GalleryScreen}
+          options={{
+            title: 'Gallery',
+          }}
+        />
+        <Stack.Screen
+          name="Settings"
+          component={SettingsScreen}
+          options={{
+            title: 'Settings',
+          }}
+        />
+        <Stack.Screen
+          name="NanoBanana"
+          component={NanoBananaScreen}
+          options={{
+            title: 'Nano Banana',
+          }}
+        />
 
-          <Stack.Screen
-            name="NanoBananaResult"
-            component={NanoBananaResultScreen}
-            options={{
-              title: 'Nano Banana Result',
-              headerShown: false,
-              // @ts-ignore
-              animationEnabled: false,
-            }}
-          />
-          <Stack.Screen
-            name="PurchaseCredits"
-            component={PurchaseCreditsScreen}
-            options={{
-              title: 'Buy Credits',
-            }}
-          />
-        </Stack.Navigator>
+        <Stack.Screen
+          name="NanoBananaResult"
+          component={NanoBananaResultScreen}
+          options={{
+            title: 'Nano Banana Result',
+            headerShown: false,
+            // @ts-ignore
+            animationEnabled: false,
+          }}
+        />
+        <Stack.Screen
+          name="PurchaseCredits"
+          component={PurchaseCreditsScreen}
+          options={{
+            title: 'Buy Credits',
+          }}
+        />
+      </Stack.Navigator>
 
-        {/* Global Onboarding Overlay */}
-        <OnboardingOverlay />
+      {/* Global Onboarding Overlay */}
+      <OnboardingOverlay />
 
-        {/* Debug Overlay Restricted to Admin */}
-        <DebugOverlay />
-      </NavigationContainer>
+      {/* Debug Overlay Restricted to Admin */}
+      <DebugOverlay />
+    </NavigationContainer>
   );
 }
 
@@ -305,19 +295,7 @@ function UnauthenticatedApp(): React.JSX.Element {
   );
 }
 
-// Fallback component when Supabase is not configured
-function SupabaseNotConfigured(): React.JSX.Element {
-  return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-      <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 10 }}>
-        Supabase Not Configured
-      </Text>
-      <Text style={{ textAlign: 'center', color: '#666' }}>
-        Please set up your EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in your environment configuration.
-      </Text>
-    </View>
-  );
-}
+
 
 export default function App(): React.JSX.Element {
   // Check if Clerk is properly configured
@@ -325,10 +303,7 @@ export default function App(): React.JSX.Element {
     return <ClerkNotConfigured />;
   }
 
-  // Check if Supabase is properly configured
-  if (!supabaseService.isConfigured()) {
-    return <SupabaseNotConfigured />;
-  }
+
 
   return (
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
