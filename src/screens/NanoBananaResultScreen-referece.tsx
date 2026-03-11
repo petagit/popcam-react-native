@@ -391,7 +391,7 @@ export default function NanoBananaResultScreen(): React.JSX.Element {
         {/* Floating Header */}
         <SafeAreaView style={tw`absolute top-0 left-0 right-0 z-10`} pointerEvents="box-none">
           <View style={tw`flex-row justify-between items-center px-5 py-2`}>
-            <BackButton color="#ffffff" style={tw`bg-black/40`} />
+            <BackButton color="#ffffff" style={tw`rounded-full bg-black/40`} />
             <TouchableOpacity
               onPress={() => {
                 Alert.alert(

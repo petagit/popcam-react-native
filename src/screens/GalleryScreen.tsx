@@ -21,6 +21,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import GlassButton from '../components/buttons/GlassButton';
 import BackButton from '../components/buttons/BackButton';
 import AppBackground from '../components/AppBackground'; import { storageService } from '../services/storageService';
+import { r2Service } from '../services/r2Service';
 import { useUser } from '@clerk/clerk-expo';
 
 type GalleryScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Gallery'>;
@@ -138,15 +139,25 @@ export default function GalleryScreen(): React.JSX.Element {
       if (!res.ok) throw new Error(`Failed to load gallery: ${res.status}`);
 
       const data = await res.json();
-      const analyses: ImageAnalysis[] = (data.images ?? []).map((img: any) => ({
-        id: img.id,
-        imageUri: img.imageUrl,
-        infographicUri: img.imageUrl,
-        hasInfographic: true,
-        description: '',
-        tags: [],
-        timestamp: new Date(img.createdAt),
-        cloudUrl: img.imageUrl,
+      const analyses: ImageAnalysis[] = await Promise.all((data.images ?? []).map(async (img: any) => {
+        let resolvedUrl = img.imageUrl;
+        if (resolvedUrl && !resolvedUrl.startsWith('file://')) {
+          try {
+            resolvedUrl = await r2Service.resolveUrl(resolvedUrl) || resolvedUrl;
+          } catch (err) {
+            console.warn('URL resolution failed:', err);
+          }
+        }
+        return {
+          id: img.id,
+          imageUri: resolvedUrl,
+          infographicUri: resolvedUrl,
+          hasInfographic: true,
+          description: '',
+          tags: [],
+          timestamp: new Date(img.createdAt),
+          cloudUrl: img.imageUrl,
+        };
       }));
 
       updateDisplayData(analyses);
@@ -215,7 +226,7 @@ export default function GalleryScreen(): React.JSX.Element {
   const renderItem = ({ item, index }: { item: ListItem; index: number }) => {
     if (item.type === 'header') {
       return (
-        <View style={tw`px-4 py-3 bg-gray-50 border-t border-gray-200`}>
+        <View style={tw`px-4 py-3 bg-transparent`}>
           <Text style={tw`text-lg font-semibold text-gray-800`}>{item.title}</Text>
           <Text style={tw`text-sm text-gray-500`}>
             {item.count} {item.count === 1 ? 'generation' : 'generations'}

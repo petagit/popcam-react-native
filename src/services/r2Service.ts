@@ -79,21 +79,27 @@ class R2Service {
         if (path.startsWith('http')) {
             if (isSignedUrl) {
                 try {
-                    // Start after the domain (roughly). R2/S3 URLs are usually /BUCKET/KEY or HOST/KEY.
-                    // Our R2 URL: https://BUCKET.ACCOUNT.r2..../KEY
                     const urlObj = new URL(path);
                     let key = urlObj.pathname.startsWith('/') ? urlObj.pathname.substring(1) : urlObj.pathname;
-
-                    // Fix: Remove bucket name from path if present (S3 path-style access pattern)
-                    // R2/S3 URLs often include the bucket name as the first segment of the path.
                     if (key.startsWith(`${this.bucketName}/`)) {
                         key = key.substring(this.bucketName.length + 1);
                     }
-
-                    // Proceed to re-sign this key
                     path = decodeURIComponent(key);
                 } catch (e) {
                     console.warn('Failed to extract key from signed URL, returning as is', e);
+                    return path;
+                }
+            } else if (path.includes('.r2.dev') || path.includes('.r2.cloudflarestorage.com')) {
+                // If it's a static r2 URL but the bucket is not public, we must sign it!
+                try {
+                    const urlObj = new URL(path);
+                    let key = urlObj.pathname.startsWith('/') ? urlObj.pathname.substring(1) : urlObj.pathname;
+                    if (key.startsWith(`${this.bucketName}/`)) {
+                        key = key.substring(this.bucketName.length + 1);
+                    }
+                    path = decodeURIComponent(key);
+                } catch (e) {
+                    console.warn('Failed to extract key from public R2 URL, returning as is', e);
                     return path;
                 }
             } else {

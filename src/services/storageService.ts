@@ -199,14 +199,14 @@ class StorageService {
         try {
           const item = { ...analysis };
 
-          // Resolve main image URI if it looks like an R2 key (not http/file)
-          if (item.imageUri && !item.imageUri.startsWith('http') && !item.imageUri.startsWith('file://')) {
+          // Resolve main image URI if it looks like an R2 key or public R2 URL
+          if (item.imageUri && !item.imageUri.startsWith('file://')) {
             const url = await r2Service.resolveUrl(item.imageUri);
             if (url) item.imageUri = url;
           }
 
-          // Resolve infographic URI if it looks like an R2 key
-          if (item.infographicUri && !item.infographicUri.startsWith('http') && !item.infographicUri.startsWith('file://')) {
+          // Resolve infographic URI if it looks like an R2 key or public R2 URL
+          if (item.infographicUri && !item.infographicUri.startsWith('file://')) {
             const url = await r2Service.resolveUrl(item.infographicUri);
             if (url) item.infographicUri = url;
           }
